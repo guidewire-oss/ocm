@@ -193,3 +193,4 @@ Anyone can comment on issues and submit reviews for pull requests. In order to b
 # References
 
 Please refer to [the Contribution Guide](https://open-cluster-management.io/contribute/)
+Test commit signing
