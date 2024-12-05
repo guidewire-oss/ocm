@@ -9,9 +9,9 @@ RUN apt-get update
 RUN apt-get install unzip
 RUN unzip -v
 RUN if [ "$ARCH" = "arm64" ]; then \
-        curl "https://awscli.amazonaws.com/awscli-exe-${OS}-aarch64-${VERSION}.zip" -o "awscliv2.zip"; \
+        curl "https://awscli.amazonaws.com/awscli-exe-${OS}-aarch64.zip" -o "awscliv2.zip"; \
     else \
-        curl "https://awscli.amazonaws.com/awscli-exe-${OS}-x86_64-${VERSION}.zip" -o "awscliv2.zip"; \
+        curl "https://awscli.amazonaws.com/awscli-exe-${OS}-x86_64.zip" -o "awscliv2.zip"; \
     fi && echo "The ARCH is $ARCH"
 RUN unzip awscliv2.zip
 
