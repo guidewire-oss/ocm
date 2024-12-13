@@ -3,8 +3,13 @@ package registration
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"log"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -62,6 +67,46 @@ func (c *managedClusterCreatingController) sync(ctx context.Context, syncCtx fac
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
+
+	// By default, the SDK detects AWS credentials set in your environment
+	// https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/#environment-variables
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create an Amazon sts service client
+	stsClient := sts.NewFromConfig(cfg)
+	identity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Testing aws go sdk, Account: %s, Arn: %s", aws.ToString(identity.Account), aws.ToString(identity.Arn))
+
+	// Define the role name and trust policy
+	roleName := "GauravTestRole"
+	trustPolicy := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Effect": "Allow",
+				"Principal": {
+					"Service": "ec2.amazonaws.com"
+				},
+				"Action": "sts:AssumeRole"
+			}
+		]
+	}`
+	iamClient := iam.NewFromConfig(cfg)
+	createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
+		RoleName:                 aws.String(roleName),
+		AssumeRolePolicyDocument: aws.String(trustPolicy),
+	})
+	if err != nil {
+		fmt.Printf("Failed to create IAM role: %v\n", err)
+		log.Fatal(err)
+	}
+	fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 
 	// create ManagedCluster if not found
 	if errors.IsNotFound(err) {
