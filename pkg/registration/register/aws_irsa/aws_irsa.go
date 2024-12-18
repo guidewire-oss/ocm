@@ -82,8 +82,22 @@ func (c *AWSIRSADriver) reset() {
 
 func (c *AWSIRSADriver) BuildKubeConfigFromTemplate(kubeConfig *clientcmdapi.Config) *clientcmdapi.Config {
 	kubeConfig.AuthInfos = map[string]*clientcmdapi.AuthInfo{register.DefaultKubeConfigAuth: {
-		ClientCertificate: TLSCertFile,
-		ClientKey:         TLSKeyFile,
+		Exec: &clientcmdapi.ExecConfig{
+			APIVersion: "client.authentication.k8s.io/v1beta1",
+			Command:    "aws",
+			Args: []string{
+				"--region",
+				"us-west-2",
+				"eks",
+				"get-token",
+				"--cluster-name",
+				"atmos-scratch-hub",
+				"--output",
+				"json",
+				"--role",
+				"arn:aws:iam::776719623202:role/ocm-hub-0ba2043f169482372b8fe10a00f51bcd",
+			},
+		},
 	}}
 
 	return kubeConfig
