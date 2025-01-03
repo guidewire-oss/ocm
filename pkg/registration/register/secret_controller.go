@@ -88,12 +88,13 @@ func NewSecretController(
 			return false
 		}, secretOption.ManagementSecretInformer)
 
-	driverInformer, driverFilter := driver.InformerHandler(option)
-	if driverInformer != nil && driverFilter != nil {
-		f = f.WithFilteredEventsInformersQueueKeyFunc(func(obj runtime.Object) string {
-			return factory.DefaultQueueKey
-		}, driverFilter, driverInformer)
-	}
+	// TODO: Fix the event filter function
+	//driverInformer, driverFilter := driver.InformerHandler(option)
+	//if driverInformer != nil && driverFilter != nil {
+	//	f = f.WithFilteredEventsInformersQueueKeyFunc(func(obj runtime.Object) string {
+	//		return factory.DefaultQueueKey
+	//	}, driverFilter, driverInformer)
+	//}
 
 	return f.WithSync(c.sync).
 		ResyncEvery(ControllerResyncInterval).

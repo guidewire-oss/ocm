@@ -192,7 +192,10 @@ func (o *SpokeAgentConfig) RunSpokeAgentWithSpokeInformers(ctx context.Context,
 	var registerDriver register.RegisterDriver
 	var registrationOption = o.registrationOption
 	if registrationOption.RegistrationAuth == AwsIrsaAuthType {
-		registerDriver = awsIrsa.NewAWSIRSADriver(o.registrationOption.ManagedClusterArn, o.registrationOption.ManagedClusterRoleSuffix)
+		registerDriver = awsIrsa.NewAWSIRSADriver(o.registrationOption.ManagedClusterArn,
+			o.registrationOption.ManagedClusterRoleSuffix,
+			o.registrationOption.HubClusterArn,
+			o.agentOptions.SpokeClusterName)
 	} else {
 		registerDriver = csr.NewCSRDriver()
 	}

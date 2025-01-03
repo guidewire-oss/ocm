@@ -1,6 +1,7 @@
 package registration_test
 
 import (
+	"bytes"
 	"fmt"
 	"path"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/client-go/tools/clientcmd"
 
 	commonoptions "open-cluster-management.io/ocm/pkg/common/options"
 	"open-cluster-management.io/ocm/pkg/registration/spoke"
@@ -75,24 +77,55 @@ var _ = ginkgo.Describe("Joining Process for aws flow", func() {
 			err = authn.ApproveSpokeClusterCSR(kubeClient, managedClusterName, time.Hour*24)
 			gomega.Expect(err).To(gomega.HaveOccurred())
 
-			// the hub kubeconfig secret should be filled after the ManagedCluster is accepted
-			// TODO: Revisit while implementing slice 3
-			//gomega.Eventually(func() error {
-			//	secret, err := util.GetFilledHubKubeConfigSecret(kubeClient, testNamespace, hubKubeconfigSecret)
-			//	if err != nil {
-			//		return err
-			//	}
-			//
-			//	// check if the proxyURL is set correctly
-			//	proxyURL, err := getProxyURLFromKubeconfigData(secret.Data["kubeconfig"])
-			//	if err != nil {
-			//		return err
-			//	}
-			//	if proxyURL != expectedProxyURL {
-			//		return fmt.Errorf("expected proxy url %q, but got %q", expectedProxyURL, proxyURL)
-			//	}
-			//	return nil
-			//}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
+			gomega.Eventually(func() error {
+				secret, err := util.GetFilledAWSHubKubeConfigSecret(kubeClient, testNamespace, hubKubeconfigSecret)
+				if err != nil {
+					return err
+				}
+
+				hubKubeConfig, err := clientcmd.Load(secret.Data["kubeconfig"])
+				if err != nil {
+					return err
+				}
+				hubCurrentContext, ok := hubKubeConfig.Contexts[hubKubeConfig.CurrentContext]
+				if !ok {
+					return fmt.Errorf("context pointed to by the current-context property is missing")
+				}
+				hubCluster, ok := hubKubeConfig.Clusters[hubCurrentContext.Cluster]
+				if !ok {
+					return fmt.Errorf("cluster pointed to by the current-context is missing")
+				}
+
+				// TODO: assert user is well formed
+				//hubUser, ok := hubKubeConfig.AuthInfos[hubCurrentContext.AuthInfo]
+				//if !ok {
+				//	return fmt.Errorf("user pointed to by the current-context is missing")
+				//}
+
+				bootstrapKubeConfig, err := clientcmd.LoadFromFile(agentOptions.BootstrapKubeconfig)
+				if err != nil {
+					return err
+				}
+				bootstrapCurrentContext, ok := bootstrapKubeConfig.Contexts[bootstrapKubeConfig.CurrentContext]
+				if !ok {
+					return fmt.Errorf("context pointed to by the current-context property is missing")
+				}
+				bootstrapCluster, ok := bootstrapKubeConfig.Clusters[bootstrapCurrentContext.Cluster]
+				if !ok {
+					return fmt.Errorf("cluster pointed to by the current-context is missing")
+				}
+
+				if hubCluster.Server != bootstrapCluster.Server {
+					return fmt.Errorf("serverUrl mismatch in hub kubeconfig and bootstrap kubeconfig")
+				}
+				if !bytes.Equal(hubCluster.CertificateAuthorityData, bootstrapCluster.CertificateAuthorityData) {
+					return fmt.Errorf("certificateAuthorityData mismatch in hub kubeconfig and bootstrap kubeconfig")
+				}
+
+				// TODO: assert other parts of the secret like agent-name and cluster-name similar to csr test
+
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
 
 			// the spoke cluster should have joined condition finally
 			// TODO: Revisit while implementing slice 3
