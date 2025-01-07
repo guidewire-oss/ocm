@@ -169,9 +169,10 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 		WorkWebhook: manifests.Webhook{
 			Port: defaultWebhookPort,
 		},
-		ResourceRequirementResourceType: helpers.ResourceType(clusterManager),
-		ResourceRequirements:            resourceRequirements,
-		WorkDriver:                      string(workDriver),
+		ResourceRequirementResourceType:   helpers.ResourceType(clusterManager),
+		ResourceRequirements:              resourceRequirements,
+		WorkDriver:                        string(workDriver),
+		ManagedClusterIdentityCreatorRole: computeManagedClusterIdentityCreatorRole(*clusterManager),
 	}
 
 	var registrationFeatureMsgs, workFeatureMsgs, addonFeatureMsgs string
@@ -418,4 +419,15 @@ func (n *clusterManagerController) getImagePullSecret(ctx context.Context) (stri
 	}
 
 	return helpers.ImagePullSecret, nil
+}
+
+func computeManagedClusterIdentityCreatorRole(cm operatorapiv1.ClusterManager) string {
+	for _, authDriver := range cm.Spec.RegistrationConfiguration.AuthDrivers {
+		if authDriver.AuthType == "awsirsa" {
+			hubClusterArn := authDriver.HubClusterArn
+			hubClusterAccountId, hubClusterName := commonhelper.GetAwsAccountIdAndClusterName(hubClusterArn)
+			return "arn:aws:iam::" + hubClusterAccountId + ":role/" + hubClusterName + "_managed-cluster-identity-creator"
+		}
+	}
+	return ""
 }
