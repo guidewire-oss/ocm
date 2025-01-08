@@ -422,9 +422,9 @@ func (n *clusterManagerController) getImagePullSecret(ctx context.Context) (stri
 }
 
 func computeManagedClusterIdentityCreatorRole(cm operatorapiv1.ClusterManager) string {
-	for _, authDriver := range cm.Spec.RegistrationConfiguration.AuthDrivers {
-		if authDriver.AuthType == "awsirsa" {
-			hubClusterArn := authDriver.HubClusterArn
+	for _, registrationDriver := range cm.Spec.RegistrationConfiguration.RegistrationDrivers {
+		if registrationDriver.AuthType == "awsirsa" {
+			hubClusterArn := registrationDriver.HubClusterArn
 			hubClusterAccountId, hubClusterName := commonhelper.GetAwsAccountIdAndClusterName(hubClusterArn)
 			return "arn:aws:iam::" + hubClusterAccountId + ":role/" + hubClusterName + "_managed-cluster-identity-creator"
 		}
