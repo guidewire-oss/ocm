@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	errorhelpers "errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -211,7 +212,11 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 	config.AddOnManagerEnabled = helpers.FeatureGateEnabled(addonFeatureGates, ocmfeature.DefaultHubAddonManagerFeatureGates, ocmfeature.AddonManagement)
 
 	// Compute and populate the value of managed cluster identity creator role to be used in cluster manager registration service account
-	config.ManagedClusterIdentityCreatorRole = computeManagedClusterIdentityCreatorRole(*clusterManager)
+	managedClusterIdentityCreatorRole, err := computeManagedClusterIdentityCreatorRole(*clusterManager)
+	if err != nil {
+		klog.Warningf("failed to compute ManagedClusterIdentityCreatorRole: %v", err)
+	}
+	config.ManagedClusterIdentityCreatorRole = managedClusterIdentityCreatorRole
 
 	// If we are deploying in the hosted mode, it requires us to create webhook in a different way with the default mode.
 	// In the hosted mode, the webhook servers is running in the management cluster but the users are accessing the hub cluster.
@@ -423,13 +428,16 @@ func (n *clusterManagerController) getImagePullSecret(ctx context.Context) (stri
 	return helpers.ImagePullSecret, nil
 }
 
-func computeManagedClusterIdentityCreatorRole(cm operatorapiv1.ClusterManager) string {
+func computeManagedClusterIdentityCreatorRole(cm operatorapiv1.ClusterManager) (string, error) {
 	for _, registrationDriver := range cm.Spec.RegistrationConfiguration.RegistrationDrivers {
 		if registrationDriver.AuthType == "awsirsa" {
 			hubClusterArn := registrationDriver.HubClusterArn
 			hubClusterAccountId, hubClusterName := commonhelper.GetAwsAccountIdAndClusterName(hubClusterArn)
-			return "arn:aws:iam::" + hubClusterAccountId + ":role/" + hubClusterName + "_managed-cluster-identity-creator"
+			if hubClusterAccountId != "" && hubClusterName != "" {
+				return "arn:aws:iam::" + hubClusterAccountId + ":role/" + hubClusterName + "_managed-cluster-identity-creator", nil
+			}
+			return "", fmt.Errorf("unable to get account id and cluster name from hubClusterArn")
 		}
 	}
-	return ""
+	return "", nil
 }

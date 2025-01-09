@@ -1314,7 +1314,6 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 				},
 			}
 			_, err = operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
-			clusterManager, err = operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
 			return err
 		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
 
@@ -1331,5 +1330,34 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 			return true
 		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 
+	})
+
+	ginkgo.It("should not have annotation created for managed cluster identity creator role arn when registration driver is empty", func() {
+		gomega.Eventually(func() error {
+			clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(
+				context.Background(), clusterManagerName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if clusterManager.Spec.RegistrationConfiguration == nil {
+				clusterManager.Spec.RegistrationConfiguration = &operatorapiv1.RegistrationHubConfiguration{}
+			}
+			_, err = operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
+			return err
+		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+		gomega.Eventually(func() bool {
+			registrationControllerSA, err := kubeClient.CoreV1().ServiceAccounts(hubNamespace).Get(
+				context.Background(), hubRegistrationSA, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			annotation := registrationControllerSA.Annotations["eks.amazonaws.com/role-arn"]
+			if annotation != "" {
+				return false
+			}
+			return true
+		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 	})
 })
