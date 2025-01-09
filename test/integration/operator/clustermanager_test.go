@@ -1118,6 +1118,7 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 				}
 				clusterManager.Spec.RegistrationConfiguration.AutoApproveUsers = []string{"user1", "user2"}
 				_, err = operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
+				clusterManager, err = operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
 				return err
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
 
@@ -1293,5 +1294,42 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 			gomega.Expect(workHubControllerDeployment.Spec.Template.Spec.Containers[0].Args).Should(
 				gomega.ContainElement("manager"))
 		})
+	})
+
+	ginkgo.It("should have expected annotation created for managed cluster identity creator role arn", func() {
+		gomega.Eventually(func() error {
+			clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(
+				context.Background(), clusterManagerName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if clusterManager.Spec.RegistrationConfiguration == nil {
+				clusterManager.Spec.RegistrationConfiguration = &operatorapiv1.RegistrationHubConfiguration{}
+			}
+			clusterManager.Spec.RegistrationConfiguration.RegistrationDrivers = []operatorapiv1.RegistrationDriverHub{
+				{
+					AuthType:      "awsirsa",
+					HubClusterArn: "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster",
+				},
+			}
+			_, err = operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
+			clusterManager, err = operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
+			return err
+		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+		gomega.Eventually(func() bool {
+			registrationControllerSA, err := kubeClient.CoreV1().ServiceAccounts(hubNamespace).Get(
+				context.Background(), hubRegistrationSA, metav1.GetOptions{})
+			if err != nil {
+				return false
+			}
+			annotation := registrationControllerSA.Annotations["eks.amazonaws.com/role-arn"]
+			if annotation != "arn:aws:iam::123456789012:role/hub-cluster_managed-cluster-identity-creator" {
+				return false
+			}
+			return true
+		}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
 	})
 })

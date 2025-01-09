@@ -169,10 +169,9 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 		WorkWebhook: manifests.Webhook{
 			Port: defaultWebhookPort,
 		},
-		ResourceRequirementResourceType:   helpers.ResourceType(clusterManager),
-		ResourceRequirements:              resourceRequirements,
-		WorkDriver:                        string(workDriver),
-		ManagedClusterIdentityCreatorRole: computeManagedClusterIdentityCreatorRole(*clusterManager),
+		ResourceRequirementResourceType: helpers.ResourceType(clusterManager),
+		ResourceRequirements:            resourceRequirements,
+		WorkDriver:                      string(workDriver),
 	}
 
 	var registrationFeatureMsgs, workFeatureMsgs, addonFeatureMsgs string
@@ -210,6 +209,9 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 
 	// Check if addon management is enabled by the feature gate
 	config.AddOnManagerEnabled = helpers.FeatureGateEnabled(addonFeatureGates, ocmfeature.DefaultHubAddonManagerFeatureGates, ocmfeature.AddonManagement)
+
+	// Compute and populate the value of managed cluster identity creator role to be used in cluster manager registration service account
+	config.ManagedClusterIdentityCreatorRole = computeManagedClusterIdentityCreatorRole(*clusterManager)
 
 	// If we are deploying in the hosted mode, it requires us to create webhook in a different way with the default mode.
 	// In the hosted mode, the webhook servers is running in the management cluster but the users are accessing the hub cluster.
