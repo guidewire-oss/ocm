@@ -3,6 +3,16 @@ package managedcluster
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
+	"log"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	operatorinformer "open-cluster-management.io/api/client/operator/informers/externalversions"
+	operatorlister "open-cluster-management.io/api/client/operator/listers/operator/v1"
+	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
+
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -39,19 +49,21 @@ const clusterAcceptedAnnotationKey = "open-cluster-management.io/automatically-a
 
 // managedClusterController reconciles instances of ManagedCluster on the hub.
 type managedClusterController struct {
-	kubeClient    kubernetes.Interface
-	clusterClient clientset.Interface
-	clusterLister listerv1.ManagedClusterLister
-	applier       *apply.PermissionApplier
-	patcher       patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
-	approver      register.Approver
-	eventRecorder events.Recorder
+	kubeClient     kubernetes.Interface
+	clusterClient  clientset.Interface
+	clusterLister  listerv1.ManagedClusterLister
+	applier        *apply.PermissionApplier
+	patcher        patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
+	approver       register.Approver
+	eventRecorder  events.Recorder
+	operatorClient operatorclient.Interface
 }
 
 // NewManagedClusterController creates a new managed cluster controller
 func NewManagedClusterController(
 	kubeClient kubernetes.Interface,
 	clusterClient clientset.Interface,
+	operatorClient operatorclient.Interface,
 	clusterInformer informerv1.ManagedClusterInformer,
 	roleInformer rbacv1informers.RoleInformer,
 	clusterRoleInformer rbacv1informers.ClusterRoleInformer,
@@ -59,9 +71,11 @@ func NewManagedClusterController(
 	clusterRoleBindingInformer rbacv1informers.ClusterRoleBindingInformer,
 	approver register.Approver,
 	recorder events.Recorder) factory.Controller {
+
 	c := &managedClusterController{
 		kubeClient:    kubeClient,
 		clusterClient: clusterClient,
+		operatorClient: operatorClient,
 		clusterLister: clusterInformer.Lister(),
 		approver:      approver,
 		applier: apply.NewPermissionApplier(
@@ -202,6 +216,84 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 			errs = append(errs, result.Error)
 		}
 	}
+
+
+
+	clusterManager,err :=c.operatorClient.OperatorV1().ClusterManagers().Get(context.TODO(),"clustermanager",metav1.GetOptions{})
+	RegistrationDrivers := clusterManager.Spec.RegistrationConfiguration.RegistrationDrivers
+	var hubClusterArn string;
+	var managedClusterIamRoleSuffix string;
+	for _, registrationDriver := range RegistrationDrivers {
+		if registrationDriver.AuthType == "awsirsa" {
+			managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
+			hubClusterArn = registrationDriver.HubClusterArn
+			cfg, err := config.LoadDefaultConfig(context.TODO())
+
+			// Define the role name and trust policy
+			roleName := "ocm-hub-"+managedClusterIamRoleSuffix
+			AccessPolicy := fmt.Sprintf(`{
+			  "Version": "2012-10-17",
+			  "Statement": [
+				{
+				  "Effect": "Allow",
+				  "Action": [
+					"eks:DescribeCluster",
+					"eks:ListClusters"
+				  ],
+				  "Resource": %s
+				}
+			  ]}`,hubClusterArn)
+			//TODO: extract the missing variable values
+			trustPolicy := fmt.Sprintf(`{
+				"Version": "2012-10-17",
+					"Statement": [
+			{
+			"Effect": "Allow",
+			"Principal": {
+			"AWS": "arn:aws:iam::%s:role/ocm-managed-cluster-%s
+			},
+			"Action": "sts:AssumeRole",
+			"Condition": {
+			"StringEquals": {
+			"aws:PrincipalTag/hub_cluster_account_id":%s,
+			"aws:PrincipalTag/hub_cluster_name":%s,
+			"aws:PrincipalTag/managed_cluster_account_id":%s,
+			"aws:PrincipalTag/managed_cluster_name":%s"
+			}
+			}
+			}
+			]
+			}`,managedClusterAccountId,managedClusterIamRoleSuffix ,hubAccountId , hubClusterName ,managedClusterAccountId , managedClusterName )
+
+
+
+			// Create an IAM client
+			iamClient := iam.NewFromConfig(cfg)
+			createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
+				RoleName:                 aws.String(roleName),
+				AssumeRolePolicyDocument: aws.String(AccessPolicy),
+
+			})
+			if err != nil {
+				fmt.Printf("Failed to create IAM role: %v\n", err)
+				log.Fatal(err)
+			}
+			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
+
+
+			break
+		}
+	}
+
+
+
+
+
+
+
+
+
+
 
 	// We add the accepted condition to spoke cluster
 	acceptedCondition := metav1.Condition{

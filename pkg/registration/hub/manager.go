@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
@@ -88,6 +89,11 @@ func (m *HubManagerOptions) RunControllerManager(ctx context.Context, controller
 		return err
 	}
 
+	operatorClient, err := operatorclient.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
 	clusterProfileClient, err := cpclientset.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
 		return err
@@ -128,7 +134,7 @@ func (m *HubManagerOptions) RunControllerManager(ctx context.Context, controller
 
 	return m.RunControllerManagerWithInformers(
 		ctx, controllerContext,
-		kubeClient, metadataClient, clusterClient, clusterProfileClient, addOnClient,
+		kubeClient, metadataClient, clusterClient, operatorClient, clusterProfileClient, addOnClient,
 		kubeInfomers, clusterInformers, clusterProfileInformers, workInformers, addOnInformers,
 	)
 }
@@ -139,6 +145,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	kubeClient kubernetes.Interface,
 	metadataClient metadata.Interface,
 	clusterClient clusterv1client.Interface,
+	operatorClient operatorclient.Interface,
 	clusterProfileClient cpclientset.Interface,
 	addOnClient addonclient.Interface,
 	kubeInformers kubeinformers.SharedInformerFactory,
@@ -157,6 +164,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	managedClusterController := managedcluster.NewManagedClusterController(
 		kubeClient,
 		clusterClient,
+		operatorClient,
 		clusterInformers.Cluster().V1().ManagedClusters(),
 		kubeInformers.Rbac().V1().Roles(),
 		kubeInformers.Rbac().V1().ClusterRoles(),
