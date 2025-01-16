@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	fakeoperatorlient "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
 
@@ -34,6 +36,7 @@ func TestSyncManagedCluster(t *testing.T) {
 		startingObjects        []runtime.Object
 		validateClusterActions func(t *testing.T, actions []clienttesting.Action)
 		validateKubeActions    func(t *testing.T, actions []clienttesting.Action)
+		validateAWSCreateRole      func(t *testing.T)
 	}{
 		{
 			name:            "sync a deleted spoke cluster",
@@ -160,6 +163,37 @@ func TestSyncManagedCluster(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:            "accept a spoke cluster using awsirsa authentication",
+			startingObjects: []runtime.Object{testinghelpers.NewAcceptingManagedCluster()},
+			validateClusterActions: func(t *testing.T, actions []clienttesting.Action) {
+				expectedCondition := metav1.Condition{
+					Type:    v1.ManagedClusterConditionHubAccepted,
+					Status:  metav1.ConditionTrue,
+					Reason:  "HubClusterAdminAccepted",
+					Message: "Accepted by hub cluster admin",
+				}
+				testingcommon.AssertActions(t, actions, "patch")
+				patch := actions[0].(clienttesting.PatchAction).GetPatch()
+				managedCluster := &v1.ManagedCluster{}
+				err := json.Unmarshal(patch, managedCluster)
+				if err != nil {
+					t.Fatal(err)
+				}
+				testingcommon.AssertCondition(t, managedCluster.Status.Conditions, expectedCondition)
+			},
+			validateKubeActions: func(t *testing.T, actions []clienttesting.Action) {
+				testingcommon.AssertActions(t, actions,
+					"get", "create", // namespace
+					"create", // clusterrole
+					"create", // clusterrolebinding
+					"create", // registration rolebinding
+					"create") // work rolebinding
+			},
+			validateAWSCreateRole: func(t *testing.T) {
+				//TODO: add implementation
+			},
+		},
 	}
 
 	features.HubMutableFeatureGate.Add(ocmfeature.DefaultHubRegistrationFeatureGates)
@@ -178,7 +212,7 @@ func TestSyncManagedCluster(t *testing.T) {
 			}
 
 			features.HubMutableFeatureGate.Set(fmt.Sprintf("%s=%v", ocmfeature.ManagedClusterAutoApproval, c.autoApprovalEnabled))
-
+			var clusterManager  *operatorapiv1.ClusterManager;
 			ctrl := managedClusterController{
 				kubeClient,
 				clusterClient,
@@ -192,7 +226,8 @@ func TestSyncManagedCluster(t *testing.T) {
 				),
 				patcher.NewPatcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus](clusterClient.ClusterV1().ManagedClusters()),
 				register.NewNoopApprover(),
-				eventstesting.NewTestingEventRecorder(t)}
+				eventstesting.NewTestingEventRecorder(t),
+				fakeoperatorlient.NewSimpleClientset(clusterManager)}
 			syncErr := ctrl.sync(context.TODO(), testingcommon.NewFakeSyncContext(t, testinghelpers.TestManagedClusterName))
 			if syncErr != nil {
 				t.Errorf("unexpected err: %v", syncErr)

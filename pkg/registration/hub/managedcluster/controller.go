@@ -6,12 +6,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
-	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"log"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
-	operatorinformer "open-cluster-management.io/api/client/operator/informers/externalversions"
-	operatorlister "open-cluster-management.io/api/client/operator/listers/operator/v1"
 	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
+	"strings"
 
 	"time"
 
@@ -217,83 +215,10 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 		}
 	}
 
-
-
 	clusterManager,err :=c.operatorClient.OperatorV1().ClusterManagers().Get(context.TODO(),"clustermanager",metav1.GetOptions{})
 	RegistrationDrivers := clusterManager.Spec.RegistrationConfiguration.RegistrationDrivers
-	var hubClusterArn string;
-	var managedClusterIamRoleSuffix string;
-	for _, registrationDriver := range RegistrationDrivers {
-		if registrationDriver.AuthType == "awsirsa" {
-			managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
-			hubClusterArn = registrationDriver.HubClusterArn
-			cfg, err := config.LoadDefaultConfig(context.TODO())
 
-			// Define the role name and trust policy
-			roleName := "ocm-hub-"+managedClusterIamRoleSuffix
-			AccessPolicy := fmt.Sprintf(`{
-			  "Version": "2012-10-17",
-			  "Statement": [
-				{
-				  "Effect": "Allow",
-				  "Action": [
-					"eks:DescribeCluster",
-					"eks:ListClusters"
-				  ],
-				  "Resource": %s
-				}
-			  ]}`,hubClusterArn)
-			//TODO: extract the missing variable values
-			trustPolicy := fmt.Sprintf(`{
-				"Version": "2012-10-17",
-					"Statement": [
-			{
-			"Effect": "Allow",
-			"Principal": {
-			"AWS": "arn:aws:iam::%s:role/ocm-managed-cluster-%s
-			},
-			"Action": "sts:AssumeRole",
-			"Condition": {
-			"StringEquals": {
-			"aws:PrincipalTag/hub_cluster_account_id":%s,
-			"aws:PrincipalTag/hub_cluster_name":%s,
-			"aws:PrincipalTag/managed_cluster_account_id":%s,
-			"aws:PrincipalTag/managed_cluster_name":%s"
-			}
-			}
-			}
-			]
-			}`,managedClusterAccountId,managedClusterIamRoleSuffix ,hubAccountId , hubClusterName ,managedClusterAccountId , managedClusterName )
-
-
-
-			// Create an IAM client
-			iamClient := iam.NewFromConfig(cfg)
-			createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
-				RoleName:                 aws.String(roleName),
-				AssumeRolePolicyDocument: aws.String(AccessPolicy),
-
-			})
-			if err != nil {
-				fmt.Printf("Failed to create IAM role: %v\n", err)
-				log.Fatal(err)
-			}
-			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
-
-
-			break
-		}
-	}
-
-
-
-
-
-
-
-
-
-
+	CreateIAMRolesAndPoliciesForAWSIRSA(ctx, RegistrationDrivers, managedCluster)
 
 	// We add the accepted condition to spoke cluster
 	acceptedCondition := metav1.Condition{
@@ -338,3 +263,99 @@ func (c *managedClusterController) acceptCluster(ctx context.Context, managedClu
 		types.MergePatchType, []byte(patch), metav1.PatchOptions{})
 	return err
 }
+
+func GetAwsAccountIdAndClusterName(clusterArn string) (string, string) {
+	clusterStringParts := strings.Split(clusterArn, ":")
+	clusterName := strings.Split(clusterStringParts[5], "/")[1]
+	awsAccountId := clusterStringParts[4]
+	return awsAccountId, clusterName
+}
+
+
+
+func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster) error {
+	var hubClusterArn string
+	var managedClusterIamRoleSuffix string
+	for _, registrationDriver := range RegistrationDrivers {
+		if registrationDriver.AuthType == "awsirsa" {
+			managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
+			managedClusterArn := managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
+			hubClusterArn = registrationDriver.HubClusterArn
+			//Creating config for aws
+			cfg, err := config.LoadDefaultConfig(context.TODO())
+			managedClusterAccountId, managedClusterName := GetAwsAccountIdAndClusterName(managedClusterArn)
+			hubAccountId, hubClusterName := GetAwsAccountIdAndClusterName(hubClusterArn)
+			// Define the role name and trust policy
+			roleName := "ocm-hub-" + managedClusterIamRoleSuffix
+			AccessPolicy := fmt.Sprintf(`{
+			  "Version": "2012-10-17",
+			  "Statement": [
+				{
+				  "Effect": "Allow",
+				  "Action": [
+					"eks:DescribeCluster",
+					"eks:ListClusters"
+				  ],
+				  "Resource": %s
+				}
+			  ]}`, hubClusterArn)
+			//TODO: extract the missing variable values
+			trustPolicy := fmt.Sprintf(`{
+				"Version": "2012-10-17",
+					"Statement": [
+			{
+			"Effect": "Allow",
+			"Principal": {
+			"AWS": "arn:aws:iam::%s:role/ocm-managed-cluster-%s
+			},
+			"Action": "sts:AssumeRole",
+			"Condition": {
+			"StringEquals": {
+			"aws:PrincipalTag/hub_cluster_account_id":%s,
+			"aws:PrincipalTag/hub_cluster_name":%s,
+			"aws:PrincipalTag/managed_cluster_account_id":%s,
+			"aws:PrincipalTag/managed_cluster_name":%s"
+			}
+			}
+			}
+			]
+			}`, managedClusterAccountId, managedClusterIamRoleSuffix, hubAccountId, hubClusterName, managedClusterAccountId, managedClusterName)
+
+			// Create an IAM client
+			iamClient := iam.NewFromConfig(cfg)
+			createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
+				RoleName:                 aws.String(roleName),
+				AssumeRolePolicyDocument: aws.String(AccessPolicy),
+			})
+			if err != nil {
+				fmt.Printf("Failed to create IAM role: %v\n", err)
+				log.Fatal(err)
+			}
+			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
+
+			createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
+				PolicyDocument: aws.String(trustPolicy),
+				PolicyName:     aws.String("managed_cluster-trust-policy"),
+			})
+
+			if err != nil {
+				fmt.Printf("Failed to create IAM Policy: %v\n", err)
+				log.Fatal(err)
+			}
+			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
+
+			_, err = iamClient.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
+				PolicyArn: aws.String(*createPolicyResult.Policy.Arn),
+				RoleName:  aws.String(roleName),
+			})
+			if err != nil {
+				log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", *createPolicyResult.Policy.Arn, roleName, err)
+			}
+			return err
+		}
+
+		break
+	}
+	return nil
+}
+
