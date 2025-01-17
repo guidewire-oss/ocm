@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/smithy-go/middleware"
 	fakeoperatorlient "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
@@ -36,7 +41,6 @@ func TestSyncManagedCluster(t *testing.T) {
 		startingObjects        []runtime.Object
 		validateClusterActions func(t *testing.T, actions []clienttesting.Action)
 		validateKubeActions    func(t *testing.T, actions []clienttesting.Action)
-		validateAWSCreateRole      func(t *testing.T)
 	}{
 		{
 			name:            "sync a deleted spoke cluster",
@@ -163,37 +167,6 @@ func TestSyncManagedCluster(t *testing.T) {
 				}
 			},
 		},
-		{
-			name:            "accept a spoke cluster using awsirsa authentication",
-			startingObjects: []runtime.Object{testinghelpers.NewAcceptingManagedCluster()},
-			validateClusterActions: func(t *testing.T, actions []clienttesting.Action) {
-				expectedCondition := metav1.Condition{
-					Type:    v1.ManagedClusterConditionHubAccepted,
-					Status:  metav1.ConditionTrue,
-					Reason:  "HubClusterAdminAccepted",
-					Message: "Accepted by hub cluster admin",
-				}
-				testingcommon.AssertActions(t, actions, "patch")
-				patch := actions[0].(clienttesting.PatchAction).GetPatch()
-				managedCluster := &v1.ManagedCluster{}
-				err := json.Unmarshal(patch, managedCluster)
-				if err != nil {
-					t.Fatal(err)
-				}
-				testingcommon.AssertCondition(t, managedCluster.Status.Conditions, expectedCondition)
-			},
-			validateKubeActions: func(t *testing.T, actions []clienttesting.Action) {
-				testingcommon.AssertActions(t, actions,
-					"get", "create", // namespace
-					"create", // clusterrole
-					"create", // clusterrolebinding
-					"create", // registration rolebinding
-					"create") // work rolebinding
-			},
-			validateAWSCreateRole: func(t *testing.T) {
-				//TODO: add implementation
-			},
-		},
 	}
 
 	features.HubMutableFeatureGate.Add(ocmfeature.DefaultHubRegistrationFeatureGates)
@@ -212,7 +185,7 @@ func TestSyncManagedCluster(t *testing.T) {
 			}
 
 			features.HubMutableFeatureGate.Set(fmt.Sprintf("%s=%v", ocmfeature.ManagedClusterAutoApproval, c.autoApprovalEnabled))
-			var clusterManager  *operatorapiv1.ClusterManager;
+			var clusterManager *operatorapiv1.ClusterManager
 			ctrl := managedClusterController{
 				kubeClient,
 				clusterClient,
@@ -236,6 +209,81 @@ func TestSyncManagedCluster(t *testing.T) {
 			c.validateClusterActions(t, clusterClient.Actions())
 			if c.validateKubeActions != nil {
 				c.validateKubeActions(t, kubeClient.Actions())
+			}
+		})
+	}
+}
+
+func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
+	type args struct {
+		ctx                context.Context
+		withAPIOptionsFunc func(*middleware.Stack) error
+	}
+
+	cases := []struct {
+		name    string
+		args    args
+		want    error
+		wantErr bool
+	}{
+		{
+			name: "test create IAM Roles and policies for awsirsa",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"CreateRoleMock",
+							func(context.Context, middleware.FinalizeInput, middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								return middleware.FinalizeOutput{
+									Result: &iam.CreateRoleOutput{Role: &types.Role{
+										RoleName: aws.String("TestRole"),
+										Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+									},
+									},
+								}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			want:    nil,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.LoadDefaultConfig(
+				tt.args.ctx,
+				config.WithAPIOptions([]func(*middleware.Stack) error{tt.args.withAPIOptionsFunc}),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			iamClient := iam.NewFromConfig(cfg)
+
+			registrationDrivers := []operatorapiv1.RegistrationDriverHub{
+				{
+					AuthType:      "awsirsa",
+					HubClusterArn: "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster",
+				},
+			}
+			managedCluster := testinghelpers.NewManagedCluster()
+			managedCluster.Annotations = map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "test",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			}
+
+			err = CreateIAMRolesAndPoliciesForAWSIRSA(tt.args.ctx, registrationDrivers, managedCluster, iamClient)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %#v, wantErr %#v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && err.Error() != tt.want.Error() {
+				t.Errorf("err = %#v, want %#v", err, tt.want)
 			}
 		})
 	}

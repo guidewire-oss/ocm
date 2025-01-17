@@ -71,11 +71,11 @@ func NewManagedClusterController(
 	recorder events.Recorder) factory.Controller {
 
 	c := &managedClusterController{
-		kubeClient:    kubeClient,
-		clusterClient: clusterClient,
+		kubeClient:     kubeClient,
+		clusterClient:  clusterClient,
 		operatorClient: operatorClient,
-		clusterLister: clusterInformer.Lister(),
-		approver:      approver,
+		clusterLister:  clusterInformer.Lister(),
+		approver:       approver,
 		applier: apply.NewPermissionApplier(
 			kubeClient,
 			roleInformer.Lister(),
@@ -215,10 +215,19 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 		}
 	}
 
-	clusterManager,err :=c.operatorClient.OperatorV1().ClusterManagers().Get(context.TODO(),"clustermanager",metav1.GetOptions{})
+	clusterManager, err := c.operatorClient.OperatorV1().ClusterManagers().Get(context.TODO(), "clustermanager", metav1.GetOptions{})
 	RegistrationDrivers := clusterManager.Spec.RegistrationConfiguration.RegistrationDrivers
 
-	CreateIAMRolesAndPoliciesForAWSIRSA(ctx, RegistrationDrivers, managedCluster)
+	//Creating config for aws
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	// Create an IAM client
+	iamClient := iam.NewFromConfig(cfg)
+	err = CreateIAMRolesAndPoliciesForAWSIRSA(ctx, RegistrationDrivers, managedCluster, iamClient)
+	if err != nil {
+		fmt.Println("Failed to create IAM roles and policies for aws irsa", err)
+		log.Fatal(err)
+		//TODO Do we want to return error here?
+	}
 
 	// We add the accepted condition to spoke cluster
 	acceptedCondition := metav1.Condition{
@@ -271,9 +280,7 @@ func GetAwsAccountIdAndClusterName(clusterArn string) (string, string) {
 	return awsAccountId, clusterName
 }
 
-
-
-func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster) error {
+func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster, iamClient *iam.Client) error {
 	var hubClusterArn string
 	var managedClusterIamRoleSuffix string
 	for _, registrationDriver := range RegistrationDrivers {
@@ -281,8 +288,7 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 			managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
 			managedClusterArn := managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
 			hubClusterArn = registrationDriver.HubClusterArn
-			//Creating config for aws
-			cfg, err := config.LoadDefaultConfig(context.TODO())
+
 			managedClusterAccountId, managedClusterName := GetAwsAccountIdAndClusterName(managedClusterArn)
 			hubAccountId, hubClusterName := GetAwsAccountIdAndClusterName(hubClusterArn)
 			// Define the role name and trust policy
@@ -321,8 +327,6 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 			]
 			}`, managedClusterAccountId, managedClusterIamRoleSuffix, hubAccountId, hubClusterName, managedClusterAccountId, managedClusterName)
 
-			// Create an IAM client
-			iamClient := iam.NewFromConfig(cfg)
 			createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
 				RoleName:                 aws.String(roleName),
 				AssumeRolePolicyDocument: aws.String(AccessPolicy),
@@ -358,4 +362,3 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 	}
 	return nil
 }
-
