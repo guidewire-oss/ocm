@@ -305,7 +305,7 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 				  "Resource": %s
 				}
 			  ]}`, hubClusterArn)
-			//TODO: extract the missing variable values
+
 			trustPolicy := fmt.Sprintf(`{
 				"Version": "2012-10-17",
 					"Statement": [

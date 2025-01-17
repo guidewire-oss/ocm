@@ -233,15 +233,33 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 				withAPIOptionsFunc: func(stack *middleware.Stack) error {
 					return stack.Finalize.Add(
 						middleware.FinalizeMiddlewareFunc(
-							"CreateRoleMock",
-							func(context.Context, middleware.FinalizeInput, middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
-								return middleware.FinalizeOutput{
-									Result: &iam.CreateRoleOutput{Role: &types.Role{
-										RoleName: aws.String("TestRole"),
-										Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
-									},
-									},
-								}, middleware.Metadata{}, nil
+							"CreateRoleOrCreatePolicyOrAttachPolicyMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreateRoleOutput{Role: &types.Role{
+											RoleName: aws.String("TestRole"),
+											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreatePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+											PolicyName: aws.String("TestPolicy"),
+											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "AttachRolePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.AttachRolePolicyOutput{},
+									}, middleware.Metadata{}, nil
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
 							},
 						),
 						middleware.Before,
