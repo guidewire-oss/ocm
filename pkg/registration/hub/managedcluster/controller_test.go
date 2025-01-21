@@ -1,9 +1,16 @@
 package managedcluster
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -11,8 +18,7 @@ import (
 	"github.com/aws/smithy-go/middleware"
 	fakeoperatorlient "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	operatorapiv1 "open-cluster-management.io/api/operator/v1"
-	"testing"
-	"time"
+	commonhelper "open-cluster-management.io/ocm/pkg/common/helpers"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -214,6 +220,65 @@ func TestSyncManagedCluster(t *testing.T) {
 	}
 }
 
+func TestRenderTemplates(t *testing.T) {
+	templateFiles := []string{"AccessPolicy.tmpl", "TrustPolicy.tmpl"}
+	data := map[string]interface{}{
+		"hubClusterArn":               "arn:aws:iam::123456789012:cluster/hub-cluster",
+		"managedClusterAccountId":     "123456789013",
+		"managedClusterIamRoleSuffix": "",
+		"hubAccountId":                "123456789012",
+		"hubClusterName":              "hub-cluster",
+		"managedClusterName":          "managed-cluster",
+	}
+	data["managedClusterIamRoleSuffix"] = commonhelper.Md5HashSuffix(data["hubAccountId"].(string), data["hubClusterName"].(string), data["managedClusterAccountId"].(string), data["managedClusterName"].(string))
+	renderedTemplates, _ := renderTemplates(templateFiles, data)
+
+	filerc, fileerr := os.Open("AccessPolicy.tmpl")
+	if fileerr != nil {
+		log.Fatal(fileerr)
+	}
+	defer filerc.Close()
+
+	filebuf := new(bytes.Buffer)
+	filebuf.ReadFrom(filerc)
+	contents := filebuf.String()
+	AccessPolicy := strings.Replace(contents, "{{.hubClusterArn}}", data["hubClusterArn"].(string), 1)
+
+	filerc, fileerr = os.Open("TrustPolicy.tmpl")
+	if fileerr != nil {
+		log.Fatal(fileerr)
+	}
+	defer filerc.Close()
+
+	filebuf = new(bytes.Buffer)
+	filebuf.ReadFrom(filerc)
+	contentstrust := filebuf.String()
+
+	replacer := strings.NewReplacer("{{.managedClusterAccountId}}", data["managedClusterAccountId"].(string),
+		"{{.managedClusterIamRoleSuffix}}", data["managedClusterIamRoleSuffix"].(string),
+		"{{.hubAccountId}}", data["hubAccountId"].(string),
+		"{{.hubClusterName}}", data["hubClusterName"].(string),
+		"{{.managedClusterAccountId}}", data["managedClusterAccountId"].(string),
+		"{{.managedClusterName}}", data["managedClusterName"].(string))
+
+	TrustPolicy := replacer.Replace(contentstrust)
+
+	if len(renderedTemplates) != 2 {
+		t.Errorf("Templates not rendered as expected")
+		return
+	}
+
+	if renderedTemplates[0] != AccessPolicy {
+		t.Errorf("AccessPolicy not rendered as expected")
+		return
+	}
+
+	if renderedTemplates[1] != TrustPolicy {
+		t.Errorf("TrustPolicy not rendered as expected")
+		return
+	}
+}
+
 func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 	type args struct {
 		ctx                context.Context
@@ -221,10 +286,11 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		args    args
-		want    error
-		wantErr bool
+		name                      string
+		args                      args
+		managedClusterAnnotations map[string]string
+		want                      error
+		wantErr                   bool
 	}{
 		{
 			name: "test create IAM Roles and policies for awsirsa",
@@ -266,8 +332,173 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 					)
 				},
 			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "960c4e56c25ba0b571ddcdaa7edc943e",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
 			want:    nil,
 			wantErr: false,
+		},
+		{
+			name: "test invalid hubclusrterarn passed during join.",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"CreateRoleOrCreatePolicyOrAttachPolicyMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreateRoleOutput{Role: &types.Role{
+											RoleName: aws.String("TestRole"),
+											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreatePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+											PolicyName: aws.String("TestPolicy"),
+											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "AttachRolePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.AttachRolePolicyOutput{},
+									}, middleware.Metadata{}, nil
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "test",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
+			want:    fmt.Errorf("Hub Cluster arn provided during join is different from the current hub cluster"),
+			wantErr: true,
+		},
+		{
+			name: "test create IAM Roles and policies for awsirsa with error in CreateRole",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"CreateRoleErrorMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: nil,
+									}, middleware.Metadata{}, fmt.Errorf("failed to create IAM role")
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "960c4e56c25ba0b571ddcdaa7edc943e",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
+			want:    fmt.Errorf("operation error IAM: CreateRole, failed to create IAM role"),
+			wantErr: true,
+		},
+		{
+			name: "test create IAM Roles and policies for awsirsa with error in CreatePolicy",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"CreatePolicyErrorMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreateRoleOutput{Role: &types.Role{
+											RoleName: aws.String("TestRole"),
+											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreatePolicy" {
+									return middleware.FinalizeOutput{
+										Result: nil,
+									}, middleware.Metadata{}, fmt.Errorf("failed to create IAM policy")
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "960c4e56c25ba0b571ddcdaa7edc943e",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
+			want:    fmt.Errorf("operation error IAM: CreatePolicy, failed to create IAM policy"),
+			wantErr: true,
+		},
+		{
+			name: "test create IAM Roles and policies for awsirsa with error in AttachRolePolicy",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"AttachRolePolicyErrorMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreateRoleOutput{Role: &types.Role{
+											RoleName: aws.String("TestRole"),
+											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreatePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+											PolicyName: aws.String("TestPolicy"),
+											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "AttachRolePolicy" {
+									return middleware.FinalizeOutput{
+										Result: nil,
+									}, middleware.Metadata{}, fmt.Errorf("failed to attach policy to role")
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "960c4e56c25ba0b571ddcdaa7edc943e",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
+			want:    fmt.Errorf("operation error IAM: AttachRolePolicy, failed to attach policy to role"),
+			wantErr: true,
 		},
 	}
 
@@ -290,11 +521,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 				},
 			}
 			managedCluster := testinghelpers.NewManagedCluster()
-			managedCluster.Annotations = map[string]string{
-				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "test",
-				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
-			}
-
+			managedCluster.Annotations = tt.managedClusterAnnotations
 			err = CreateIAMRolesAndPoliciesForAWSIRSA(tt.args.ctx, registrationDrivers, managedCluster, iamClient)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %#v, wantErr %#v", err, tt.wantErr)
