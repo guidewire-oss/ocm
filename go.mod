@@ -3,10 +3,11 @@ module open-cluster-management.io/ocm
 go 1.22.5
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.33.0
+	github.com/aws/aws-sdk-go-v2 v1.35.0
 	github.com/aws/aws-sdk-go-v2/config v1.28.11
+	github.com/aws/aws-sdk-go-v2/service/eks v1.57.1
 	github.com/aws/aws-sdk-go-v2/service/iam v1.38.6
-	github.com/aws/smithy-go v1.22.1
+	github.com/aws/smithy-go v1.22.2
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/evanphx/json-patch v5.9.0+incompatible
 	github.com/ghodss/yaml v1.0.0
@@ -44,6 +45,8 @@ require (
 	sigs.k8s.io/yaml v1.4.0
 )
 
+require github.com/jmespath/go-jmespath v0.4.0 // indirect
+
 require (
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	dario.cat/mergo v1.0.1 // indirect
@@ -56,8 +59,8 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.52 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.23 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.28 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.28 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.30 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.8 // indirect

@@ -18,6 +18,7 @@ import (
 	"open-cluster-management.io/ocm/manifests"
 	commonhelpers "open-cluster-management.io/ocm/pkg/common/helpers"
 	"open-cluster-management.io/ocm/pkg/registration/register"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
 )
 
 type AwsIrsaApprover struct {
@@ -49,16 +50,17 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	}
 	// Create an IAM client
 	iamClient := iam.NewFromConfig(cfg)
-	err = CreateIAMRolesAndPoliciesForAWSIRSA(ctx, registrationDrivers, cluster, iamClient)
+	eksClient := eks.NewFromConfig(cfg)
+	err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx, registrationDrivers, cluster, iamClient, eksClient)
 	if err != nil {
-		fmt.Println("Failed to create IAM roles and policies for aws irsa", err)
+		fmt.Println("Failed to create IAM roles, policies and access entry for aws irsa", err)
 		log.Fatal(err)
 	}
 
 	return nil
 }
 
-func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster, iamClient *iam.Client) error {
+func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster, iamClient *iam.Client, eksClient *eks.Client) error {
 	var hubClusterArn string
 	var managedClusterIamRoleSuffix string
 	// Iterate through RegistrationDrivers and retrieve the HubClusterArn
@@ -79,7 +81,7 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 		// Check if hash is the same
 		hash := commonhelpers.Md5HashSuffix(hubAccountId, hubClusterName, managedClusterAccountId, managedClusterName)
 		if hash != managedClusterIamRoleSuffix {
-			err := fmt.Errorf("Hub Cluster arn provided during join is different from the current hub cluster")
+			err := fmt.Errorf("hub cluster arn provided during join is different from the current hub cluster")
 			return err
 		}
 
@@ -130,8 +132,23 @@ func CreateIAMRolesAndPoliciesForAWSIRSA(ctx context.Context, RegistrationDriver
 		})
 		if err != nil {
 			log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", *createPolicyResult.Policy.Arn, roleName, err)
+			return err
 		}
-		return err
+
+		// Create Access Entry
+		params := &eks.CreateAccessEntryInput{
+			ClusterName:   aws.String(hubClusterName),
+			PrincipalArn:  aws.String(*createRoleOutput.Role.Arn),
+			Username: aws.String(managedClusterName),
+			KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
+		}
+
+		createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
+		if err != nil {
+			log.Printf("Failed to create Access Entry: %v\n", err)
+			return err
+		}
+		fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
 	}
 	return nil
 }

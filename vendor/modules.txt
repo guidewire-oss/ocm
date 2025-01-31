@@ -26,7 +26,7 @@ github.com/antlr4-go/antlr/v4
 # github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 ## explicit; go 1.13
 github.com/asaskevich/govalidator
-# github.com/aws/aws-sdk-go-v2 v1.33.0
+# github.com/aws/aws-sdk-go-v2 v1.35.0
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/aws
 github.com/aws/aws-sdk-go-v2/aws/defaults
@@ -68,15 +68,20 @@ github.com/aws/aws-sdk-go-v2/credentials/stscreds
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds/internal/config
-# github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.28
+# github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.30
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/internal/configsources
-# github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.28
+# github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.30
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
 # github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/internal/ini
+# github.com/aws/aws-sdk-go-v2/service/eks v1.57.1
+## explicit; go 1.21
+github.com/aws/aws-sdk-go-v2/service/eks
+github.com/aws/aws-sdk-go-v2/service/eks/internal/endpoints
+github.com/aws/aws-sdk-go-v2/service/eks/types
 # github.com/aws/aws-sdk-go-v2/service/iam v1.38.6
 ## explicit; go 1.21
 github.com/aws/aws-sdk-go-v2/service/iam
@@ -103,7 +108,7 @@ github.com/aws/aws-sdk-go-v2/service/ssooidc/types
 github.com/aws/aws-sdk-go-v2/service/sts
 github.com/aws/aws-sdk-go-v2/service/sts/internal/endpoints
 github.com/aws/aws-sdk-go-v2/service/sts/types
-# github.com/aws/smithy-go v1.22.1
+# github.com/aws/smithy-go v1.22.2
 ## explicit; go 1.21
 github.com/aws/smithy-go
 github.com/aws/smithy-go/auth
@@ -338,6 +343,9 @@ github.com/imdario/mergo
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
+# github.com/jmespath/go-jmespath v0.4.0
+## explicit; go 1.14
+github.com/jmespath/go-jmespath
 # github.com/josharian/intern v1.0.0
 ## explicit; go 1.5
 github.com/josharian/intern
