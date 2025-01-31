@@ -8,8 +8,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
-	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/smithy-go/middleware"
 	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/ocm/manifests"
@@ -95,7 +97,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								operationName := middleware.GetOperationName(ctx)
 								if operationName == "CreateRole" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreateRoleOutput{Role: &types.Role{
+										Result: &iam.CreateRoleOutput{Role: &iamtypes.Role{
 											RoleName: aws.String("TestRole"),
 											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
 										},
@@ -104,7 +106,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								}
 								if operationName == "CreatePolicy" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+										Result: &iam.CreatePolicyOutput{Policy: &iamtypes.Policy{
 											PolicyName: aws.String("TestPolicy"),
 											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
 										},
@@ -114,6 +116,14 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								if operationName == "AttachRolePolicy" {
 									return middleware.FinalizeOutput{
 										Result: &iam.AttachRolePolicyOutput{},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreateAccessEntry" {
+									return middleware.FinalizeOutput{
+										Result: &eks.CreateAccessEntryOutput{AccessEntry: &ekstypes.AccessEntry{
+											AccessEntryArn: aws.String("arn:aws:eks::123456789012:access-entry/TestAccessEntry"),
+										},
+										}, 
 									}, middleware.Metadata{}, nil
 								}
 								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
@@ -142,7 +152,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								operationName := middleware.GetOperationName(ctx)
 								if operationName == "CreateRole" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreateRoleOutput{Role: &types.Role{
+										Result: &iam.CreateRoleOutput{Role: &iamtypes.Role{
 											RoleName: aws.String("TestRole"),
 											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
 										},
@@ -151,7 +161,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								}
 								if operationName == "CreatePolicy" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+										Result: &iam.CreatePolicyOutput{Policy: &iamtypes.Policy{
 											PolicyName: aws.String("TestPolicy"),
 											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
 										},
@@ -174,7 +184,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "test",
 				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
 			},
-			want:    fmt.Errorf("Hub Cluster arn provided during join is different from the current hub cluster"),
+			want:    fmt.Errorf("hub cluster arn provided during join is different from the current hub cluster"),
 			wantErr: true,
 		},
 		{
@@ -218,7 +228,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								operationName := middleware.GetOperationName(ctx)
 								if operationName == "CreateRole" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreateRoleOutput{Role: &types.Role{
+										Result: &iam.CreateRoleOutput{Role: &iamtypes.Role{
 											RoleName: aws.String("TestRole"),
 											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
 										},
@@ -256,7 +266,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								operationName := middleware.GetOperationName(ctx)
 								if operationName == "CreateRole" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreateRoleOutput{Role: &types.Role{
+										Result: &iam.CreateRoleOutput{Role: &iamtypes.Role{
 											RoleName: aws.String("TestRole"),
 											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
 										},
@@ -265,7 +275,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 								}
 								if operationName == "CreatePolicy" {
 									return middleware.FinalizeOutput{
-										Result: &iam.CreatePolicyOutput{Policy: &types.Policy{
+										Result: &iam.CreatePolicyOutput{Policy: &iamtypes.Policy{
 											PolicyName: aws.String("TestPolicy"),
 											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
 										},
@@ -304,6 +314,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 			}
 
 			iamClient := iam.NewFromConfig(cfg)
+			eksClient := eks.NewFromConfig(cfg)
 
 			registrationDrivers := []operatorapiv1.RegistrationDriverHub{
 				{
@@ -314,7 +325,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 			managedCluster := testinghelpers.NewManagedCluster()
 			managedCluster.Annotations = tt.managedClusterAnnotations
 
-			err = CreateIAMRolesAndPoliciesForAWSIRSA(tt.args.ctx, registrationDrivers, managedCluster, iamClient)
+			err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(tt.args.ctx, registrationDrivers, managedCluster, iamClient, eksClient)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %#v, wantErr %#v", err, tt.wantErr)
 				return
