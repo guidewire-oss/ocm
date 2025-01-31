@@ -118,4 +118,7 @@ rules:
 - apiGroups: ["multicluster.x-k8s.io"]
   resources: ["clusterprofiles/status"]
   verbs: ["update", "patch"]
+- apiGroups: ["operator.open-cluster-management.io"]
+  resources: ["clustermanagers"]
+  verbs: ["get"]
 {{end}}

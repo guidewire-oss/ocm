@@ -270,10 +270,7 @@ spec:
                           - awsirsa
                           type: string
                         hubClusterArn:
-                          description: |-
-                            This represents the hub cluster ARN
-                            Example - arn:eks:us-west-2:12345678910:cluster/hub-cluster1
-                          pattern: ^arn:aws:eks:([a-zA-Z0-9-]+):(\d{12}):cluster/([a-zA-Z0-9-]+)$
+                          description: This represents the hub cluster ARN
                           type: string
                       type: object
                     type: array

@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/spf13/pflag"
@@ -41,6 +43,7 @@ import (
 	"open-cluster-management.io/ocm/pkg/registration/hub/managedclustersetbinding"
 	"open-cluster-management.io/ocm/pkg/registration/hub/taint"
 	"open-cluster-management.io/ocm/pkg/registration/register"
+	awsirsa "open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 	"open-cluster-management.io/ocm/pkg/registration/register/csr"
 )
 
@@ -88,6 +91,11 @@ func (m *HubManagerOptions) RunControllerManager(ctx context.Context, controller
 		return err
 	}
 
+	operatorClient, err := operatorclient.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
 	clusterProfileClient, err := cpclientset.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
 		return err
@@ -128,7 +136,7 @@ func (m *HubManagerOptions) RunControllerManager(ctx context.Context, controller
 
 	return m.RunControllerManagerWithInformers(
 		ctx, controllerContext,
-		kubeClient, metadataClient, clusterClient, clusterProfileClient, addOnClient,
+		kubeClient, metadataClient, clusterClient, operatorClient, clusterProfileClient, addOnClient,
 		kubeInfomers, clusterInformers, clusterProfileInformers, workInformers, addOnInformers,
 	)
 }
@@ -139,6 +147,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	kubeClient kubernetes.Interface,
 	metadataClient metadata.Interface,
 	clusterClient clusterv1client.Interface,
+	operatorClient operatorclient.Interface,
 	clusterProfileClient cpclientset.Interface,
 	addOnClient addonclient.Interface,
 	kubeInformers kubeinformers.SharedInformerFactory,
@@ -147,16 +156,23 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	workInformers workv1informers.SharedInformerFactory,
 	addOnInformers addoninformers.SharedInformerFactory,
 ) error {
+
 	csrApprover, err := csr.NewCSRApprover(kubeClient, kubeInformers, m.ClusterAutoApprovalUsers, controllerContext.EventRecorder)
 	if err != nil {
 		return err
 	}
 
-	approver := register.NewAggregatedApprover(csrApprover)
+	awsIrsaApprover, err := awsirsa.NewAwsIrsaApprover()
+	if err != nil {
+		return err
+	}
+
+	approver := register.NewAggregatedApprover(csrApprover, awsIrsaApprover)
 
 	managedClusterController := managedcluster.NewManagedClusterController(
 		kubeClient,
 		clusterClient,
+		operatorClient,
 		clusterInformers.Cluster().V1().ManagedClusters(),
 		kubeInformers.Rbac().V1().Roles(),
 		kubeInformers.Rbac().V1().ClusterRoles(),

@@ -18,6 +18,7 @@ import (
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ocmfeature "open-cluster-management.io/api/feature"
+	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
 
 	"open-cluster-management.io/ocm/pkg/common/queue"
 	"open-cluster-management.io/ocm/pkg/features"
@@ -165,6 +166,11 @@ func (c *CSRApprover) Run(ctx context.Context, workers int) {
 // Cleanup is run when the cluster is deleting or hubAcceptClient is set false
 func (c *CSRApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) error {
 	// noop
+	return nil
+}
+
+func (c *CSRApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *clustermanagerv1.ClusterManager) error {
+	//noop
 	return nil
 }
 
