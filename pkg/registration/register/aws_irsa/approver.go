@@ -99,7 +99,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			fmt.Println("Failed to render templates while creating IAM role and policy", err)
 			return err
 		}
-
+		
 		createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
 			RoleName:                 aws.String(roleName),
 			AssumeRolePolicyDocument: aws.String(renderedTemplates[1]),
@@ -112,8 +112,9 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			} else {
 				log.Printf("Ignore IAM role creation error as entity already exists")
 			}
+		} else {
+			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 		}
-		fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),

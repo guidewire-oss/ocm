@@ -301,6 +301,58 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 			want:    fmt.Errorf("operation error IAM: AttachRolePolicy, failed to attach policy to role"),
 			wantErr: true,
 		},
+		{
+			name: "test create IAM Roles, Policies and EKS Access Entry for awsirsa with error in CreateAccessEntry",
+			args: args{
+				ctx: context.Background(),
+				withAPIOptionsFunc: func(stack *middleware.Stack) error {
+					return stack.Finalize.Add(
+						middleware.FinalizeMiddlewareFunc(
+							"CreateAccessEntryErrorMock",
+							func(ctx context.Context, input middleware.FinalizeInput, handler middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
+								operationName := middleware.GetOperationName(ctx)
+								if operationName == "CreateRole" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreateRoleOutput{Role: &iamtypes.Role{
+											RoleName: aws.String("TestRole"),
+											Arn:      aws.String("arn:aws:iam::123456789012:role/TestRole"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreatePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.CreatePolicyOutput{Policy: &iamtypes.Policy{
+											PolicyName: aws.String("TestPolicy"),
+											Arn:        aws.String("arn:aws:iam::123456789012:role/TestPolicy"),
+										},
+										},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "AttachRolePolicy" {
+									return middleware.FinalizeOutput{
+										Result: &iam.AttachRolePolicyOutput{},
+									}, middleware.Metadata{}, nil
+								}
+								if operationName == "CreateAccessEntry" {
+									return middleware.FinalizeOutput{
+										Result: nil,
+									}, middleware.Metadata{}, fmt.Errorf("failed to create access entry")
+								}
+								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+							},
+						),
+						middleware.Before,
+					)
+				},
+			},
+			managedClusterAnnotations: map[string]string{
+				"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "960c4e56c25ba0b571ddcdaa7edc943e",
+				"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/spoke-cluster",
+			},
+			want:    fmt.Errorf("operation error EKS: CreateAccessEntry, failed to create access entry"),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range cases {
