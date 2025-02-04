@@ -100,6 +100,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			return err
 		}
 		
+		var getRoleOutput *iam.GetRoleOutput
 		createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
 			RoleName:                 aws.String(roleName),
 			AssumeRolePolicyDocument: aws.String(renderedTemplates[1]),
@@ -111,6 +112,13 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 				return err
 			} else {
 				log.Printf("Ignore IAM role creation error as entity already exists")
+				getRoleOutput, err = iamClient.GetRole(context.TODO(), &iam.GetRoleInput{
+					RoleName: aws.String(roleName),
+				})
+				if err != nil {
+					log.Printf("Failed to get IAM role: %v\n", err)
+					return err
+				}
 			}
 		} else {
 			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
@@ -120,12 +128,16 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			PolicyDocument: aws.String(renderedTemplates[0]),
 			PolicyName:     aws.String(roleName),
 		})
-
 		if err != nil {
-			log.Printf("Failed to create IAM Policy: %v\n", err)
-			return err
+			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
+				log.Printf("Failed to create IAM Policy: %v\n", err)
+				return err
+			} else {
+				log.Printf("Ignore IAM policy creation error as entity already exists")
+			}
+		} else {
+			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 		}
-		fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 
 		_, err = iamClient.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
 			PolicyArn: aws.String(*createPolicyResult.Policy.Arn),
@@ -137,9 +149,16 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		}
 
 		// Create Access Entry
+		var principalArn string 
+		if getRoleOutput != nil {
+			principalArn = *getRoleOutput.Role.Arn
+		} else {
+			principalArn = *createRoleOutput.Role.Arn
+		}
+
 		params := &eks.CreateAccessEntryInput{
 			ClusterName:   aws.String(hubClusterName),
-			PrincipalArn:  aws.String(*createRoleOutput.Role.Arn),
+			PrincipalArn:  aws.String(principalArn),
 			Username: aws.String(managedClusterName),
 			KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
 		}
