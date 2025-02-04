@@ -12,13 +12,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 
+	"github.com/aws/aws-sdk-go-v2/service/eks"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	v1 "open-cluster-management.io/api/cluster/v1"
 	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/ocm/manifests"
 	commonhelpers "open-cluster-management.io/ocm/pkg/common/helpers"
 	"open-cluster-management.io/ocm/pkg/registration/register"
-	"github.com/aws/aws-sdk-go-v2/service/eks"
 )
 
 type AwsIrsaApprover struct {
@@ -99,7 +99,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			fmt.Println("Failed to render templates while creating IAM role and policy", err)
 			return err
 		}
-		
+
 		var getRoleOutput *iam.GetRoleOutput
 		createRoleOutput, err := iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
 			RoleName:                 aws.String(roleName),
@@ -123,24 +123,42 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		} else {
 			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 		}
-
+		var getPolicyResult *iam.GetPolicyOutput
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),
 			PolicyName:     aws.String(roleName),
 		})
 		if err != nil {
 			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
-				log.Printf("Failed to create IAM Policy: %v\n", err)
+				log.Printf("Failed to create IAM Policy:%s %v\n", err, roleName)
 				return err
 			} else {
 				log.Printf("Ignore IAM policy creation error as entity already exists")
+				policyArn, err := getPolicyArnByName(iamClient, roleName)
+				if err != nil {
+					log.Fatalf("error retrieving policy ARN: %v", err)
+				}
+				getPolicyResult, err = iamClient.GetPolicy(context.TODO(), &iam.GetPolicyInput{
+					PolicyArn: aws.String(policyArn),
+				})
+				if err != nil {
+					log.Printf("Failed to get IAM Policy: %v %v\n", err, roleName)
+					return err
+				}
 			}
 		} else {
 			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 		}
 
+		var policyArn string
+		if getPolicyResult != nil {
+			policyArn = *getRoleOutput.Role.Arn
+		} else {
+			policyArn = *createRoleOutput.Role.Arn
+		}
+
 		_, err = iamClient.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
-			PolicyArn: aws.String(*createPolicyResult.Policy.Arn),
+			PolicyArn: aws.String(policyArn),
 			RoleName:  aws.String(roleName),
 		})
 		if err != nil {
@@ -149,7 +167,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		}
 
 		// Create Access Entry
-		var principalArn string 
+		var principalArn string
 		if getRoleOutput != nil {
 			principalArn = *getRoleOutput.Role.Arn
 		} else {
@@ -157,9 +175,9 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		}
 
 		params := &eks.CreateAccessEntryInput{
-			ClusterName:   aws.String(hubClusterName),
-			PrincipalArn:  aws.String(principalArn),
-			Username: aws.String(managedClusterName),
+			ClusterName:      aws.String(hubClusterName),
+			PrincipalArn:     aws.String(principalArn),
+			Username:         aws.String(managedClusterName),
 			KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
 		}
 
@@ -204,4 +222,33 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 func NewAwsIrsaApprover() (register.Approver, error) {
 	awsIrsaApprover := &AwsIrsaApprover{}
 	return awsIrsaApprover, nil
+}
+
+func getPolicyArnByName(client *iam.Client, policyName string) (string, error) {
+	var marker *string
+	for {
+		// List policies in batches
+		output, err := client.ListPolicies(context.TODO(), &iam.ListPoliciesInput{
+			Scope:  "Local", // "Local" for customer-managed policies, "AWS" for AWS-managed
+			Marker: marker,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		// Look for the policy by name
+		for _, policy := range output.Policies {
+			if *policy.PolicyName == policyName {
+				return *policy.Arn, nil
+			}
+		}
+
+		// If there's a next page, continue
+		if output.Marker == nil {
+			break
+		}
+		marker = output.Marker
+	}
+
+	return "", fmt.Errorf("policy %s not found", policyName)
 }
