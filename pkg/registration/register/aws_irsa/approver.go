@@ -77,6 +77,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		hubAccountId, hubClusterName := commonhelpers.GetAwsAccountIdAndClusterName(hubClusterArn)
 		// Define the role name and trust policy
 		roleName := "ocm-hub-" + managedClusterIamRoleSuffix
+		policyName := "ocm-hub-" + managedClusterIamRoleSuffix
 
 		// Check if hash is the same
 		hash := commonhelpers.Md5HashSuffix(hubAccountId, hubClusterName, managedClusterAccountId, managedClusterName)
@@ -123,38 +124,29 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		} else {
 			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 		}
-		var getPolicyResult *iam.GetPolicyOutput
+		var policyArn string
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),
-			PolicyName:     aws.String(roleName),
+			PolicyName:     aws.String(policyName),
 		})
 		if err != nil {
 			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
 				log.Printf("Failed to create IAM Policy:%s %v\n", err, roleName)
 				return err
 			} else {
-				log.Printf("Ignore IAM policy creation error as entity already exists")
-				policyArn, err := getPolicyArnByName(iamClient, roleName)
+				log.Printf("Ignore IAM policy creation error as entity already exists %v" , err)
+				policyArn, err = getPolicyArnByName(iamClient, policyName)
 				if err != nil {
 					log.Fatalf("error retrieving policy ARN: %v", err)
-				}
-				getPolicyResult, err = iamClient.GetPolicy(context.TODO(), &iam.GetPolicyInput{
-					PolicyArn: aws.String(policyArn),
-				})
-				if err != nil {
-					log.Printf("Failed to get IAM Policy: %v %v\n", err, roleName)
-					return err
 				}
 			}
 		} else {
 			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 		}
 
-		var policyArn string
-		if getPolicyResult != nil {
-			policyArn = *getRoleOutput.Role.Arn
-		} else {
-			policyArn = *createRoleOutput.Role.Arn
+
+		if createPolicyResult != nil {
+			policyArn = *createPolicyResult.Policy.Arn
 		}
 
 		_, err = iamClient.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
@@ -162,7 +154,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 			RoleName:  aws.String(roleName),
 		})
 		if err != nil {
-			log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", *createPolicyResult.Policy.Arn, roleName, err)
+			log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", policyArn, roleName, err)
 			return err
 		}
 
@@ -183,8 +175,13 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 
 		createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
 		if err != nil {
-			log.Printf("Failed to create Access Entry: %v\n", err)
-			return err
+			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
+				log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
+				return err
+			} else {
+				log.Printf("Ignore Access entry creation error as entity already exists")
+			}
+
 		}
 		fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
 	}
