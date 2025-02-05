@@ -52,6 +52,7 @@ type HubManagerOptions struct {
 	ClusterAutoApprovalUsers []string
 	GCResourceList           []string
 	ImportOption             *importeroptions.Options
+	HubClusterArn            string
 }
 
 // NewHubManagerOptions returns a HubManagerOptions
@@ -71,6 +72,8 @@ func (m *HubManagerOptions) AddFlags(fs *pflag.FlagSet) {
 		"A list GVR user can customize which are cleaned up after cluster is deleted. Format is group/version/resource, "+
 			"and the default are managedclusteraddon and manifestwork. The resources will be deleted in order."+
 			"The flag works only when ResourceCleanup feature gate is enable.")
+	fs.String( "hub-cluster-arn", m.HubClusterArn,
+		"Hub Cluster Arn required to connect to Hub and create IAM Roles and Policies")
 	m.ImportOption.AddFlags(fs)
 }
 

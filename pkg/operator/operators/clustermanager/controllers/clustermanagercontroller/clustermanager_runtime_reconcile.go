@@ -55,6 +55,7 @@ type runtimeReconcile struct {
 	recorder events.Recorder
 }
 
+
 func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.ClusterManager,
 	config manifests.HubConfig) (*operatorapiv1.ClusterManager, reconcileState, error) {
 	// If AddOnManager is not enabled, remove related resources
@@ -70,6 +71,14 @@ func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.Clus
 		_, _, err := cleanResources(ctx, c.kubeClient, cm, config, mwReplicaSetDeploymentFiles...)
 		if err != nil {
 			return cm, reconcileStop, err
+		}
+	}
+
+	if cm.Spec.RegistrationConfiguration != nil {
+		for _, registrationDriver := range cm.Spec.RegistrationConfiguration.RegistrationDrivers {
+			if registrationDriver.AuthType == "awsirsa" {
+				config.HubClusterArn = registrationDriver.HubClusterArn
+			}
 		}
 	}
 
@@ -119,6 +128,7 @@ func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.Clus
 			appliedErrs = append(appliedErrs, fmt.Errorf("%q (%T): %v", result.File, result.Type, result.Error))
 		}
 	}
+
 
 	var progressingDeployments []string
 	deployResources := deploymentFiles
