@@ -12,7 +12,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	v1 "open-cluster-management.io/api/operator/v1"
 
 	testinghelpers "open-cluster-management.io/ocm/pkg/registration/helpers/testing"
 )
@@ -119,7 +118,7 @@ type testApprover struct {
 }
 
 // CreateIAMRolesAndPolicies implements Approver.
-func (t *testApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *v1.ClusterManager) error {
+func (t *testApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 	//noop
 	return nil
 }

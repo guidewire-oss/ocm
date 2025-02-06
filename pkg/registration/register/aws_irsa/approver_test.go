@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/smithy-go/middleware"
-	operatorapiv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/ocm/manifests"
 	commonhelper "open-cluster-management.io/ocm/pkg/common/helpers"
 	testinghelpers "open-cluster-management.io/ocm/pkg/registration/helpers/testing"
@@ -123,7 +122,7 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 										Result: &eks.CreateAccessEntryOutput{AccessEntry: &ekstypes.AccessEntry{
 											AccessEntryArn: aws.String("arn:aws:eks::123456789012:access-entry/TestAccessEntry"),
 										},
-										}, 
+										},
 									}, middleware.Metadata{}, nil
 								}
 								return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
@@ -367,17 +366,12 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 
 			iamClient := iam.NewFromConfig(cfg)
 			eksClient := eks.NewFromConfig(cfg)
+			HubClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster"
 
-			registrationDrivers := []operatorapiv1.RegistrationDriverHub{
-				{
-					AuthType:      "awsirsa",
-					HubClusterArn: "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster",
-				},
-			}
 			managedCluster := testinghelpers.NewManagedCluster()
 			managedCluster.Annotations = tt.managedClusterAnnotations
 
-			err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(tt.args.ctx, registrationDrivers, managedCluster, iamClient, eksClient)
+			err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(tt.args.ctx, HubClusterArn, managedCluster, iamClient, eksClient)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %#v, wantErr %#v", err, tt.wantErr)
 				return

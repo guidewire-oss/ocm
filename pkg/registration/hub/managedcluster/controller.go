@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
-
 	"time"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -42,21 +40,19 @@ const clusterAcceptedAnnotationKey = "open-cluster-management.io/automatically-a
 
 // managedClusterController reconciles instances of ManagedCluster on the hub.
 type managedClusterController struct {
-	kubeClient     kubernetes.Interface
-	clusterClient  clientset.Interface
-	clusterLister  listerv1.ManagedClusterLister
-	applier        *apply.PermissionApplier
-	patcher        patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
-	approver       register.Approver
-	eventRecorder  events.Recorder
-	operatorClient operatorclient.Interface
+	kubeClient    kubernetes.Interface
+	clusterClient clientset.Interface
+	clusterLister listerv1.ManagedClusterLister
+	applier       *apply.PermissionApplier
+	patcher       patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
+	approver      register.Approver
+	eventRecorder events.Recorder
 }
 
 // NewManagedClusterController creates a new managed cluster controller
 func NewManagedClusterController(
 	kubeClient kubernetes.Interface,
 	clusterClient clientset.Interface,
-	operatorClient operatorclient.Interface,
 	clusterInformer informerv1.ManagedClusterInformer,
 	roleInformer rbacv1informers.RoleInformer,
 	clusterRoleInformer rbacv1informers.ClusterRoleInformer,
@@ -66,11 +62,10 @@ func NewManagedClusterController(
 	recorder events.Recorder) factory.Controller {
 
 	c := &managedClusterController{
-		kubeClient:     kubeClient,
-		clusterClient:  clusterClient,
-		operatorClient: operatorClient,
-		clusterLister:  clusterInformer.Lister(),
-		approver:       approver,
+		kubeClient:    kubeClient,
+		clusterClient: clusterClient,
+		clusterLister: clusterInformer.Lister(),
+		approver:      approver,
 		applier: apply.NewPermissionApplier(
 			kubeClient,
 			roleInformer.Lister(),
@@ -212,13 +207,12 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 
 	// Only create new IAM roles when status is not present
 	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, v1.ManagedClusterConditionHubAccepted) {
-		clusterManager, err := c.operatorClient.OperatorV1().ClusterManagers().Get(context.TODO(), "cluster-manager", metav1.GetOptions{})
 		if err != nil {
 			fmt.Println("Failed to get cluster manager", err)
 			errs = append(errs, err)
 		}
 
-		err = c.approver.CreateIAMRolesAndPolicies(ctx, managedCluster, clusterManager)
+		err = c.approver.CreateIAMRolesAndPolicies(ctx, managedCluster)
 		if err != nil {
 			fmt.Println("Failed to create IAM roles and policies for aws irsa", err)
 			errs = append(errs, err)

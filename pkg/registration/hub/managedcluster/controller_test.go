@@ -7,9 +7,6 @@ import (
 	"testing"
 	"time"
 
-	fakeoperatorlient "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
-	operatorapiv1 "open-cluster-management.io/api/operator/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -181,7 +178,6 @@ func TestSyncManagedCluster(t *testing.T) {
 			}
 
 			features.HubMutableFeatureGate.Set(fmt.Sprintf("%s=%v", ocmfeature.ManagedClusterAutoApproval, c.autoApprovalEnabled))
-			var clusterManager *operatorapiv1.ClusterManager
 			ctrl := managedClusterController{
 				kubeClient,
 				clusterClient,
@@ -195,8 +191,7 @@ func TestSyncManagedCluster(t *testing.T) {
 				),
 				patcher.NewPatcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus](clusterClient.ClusterV1().ManagedClusters()),
 				register.NewNoopApprover(),
-				eventstesting.NewTestingEventRecorder(t),
-				fakeoperatorlient.NewSimpleClientset(clusterManager)}
+				eventstesting.NewTestingEventRecorder(t)}
 			syncErr := ctrl.sync(context.TODO(), testingcommon.NewFakeSyncContext(t, testinghelpers.TestManagedClusterName))
 			if syncErr != nil {
 				t.Errorf("unexpected err: %v", syncErr)

@@ -18,7 +18,6 @@ import (
 	hubclusterclientset "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1listers "open-cluster-management.io/api/client/cluster/listers/cluster/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/sdk-go/pkg/patcher"
 )
 
@@ -159,10 +158,10 @@ func (a *AggregatedApprover) Cleanup(ctx context.Context, cluster *clusterv1.Man
 }
 
 // CreateIAMRolesAndPolicies implements Approver.
-func (a *AggregatedApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *clustermanagerv1.ClusterManager) error {
+func (a *AggregatedApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 	var errs []error
 	for _, approver := range a.approvers {
-		if err := approver.CreateIAMRolesAndPolicies(ctx, cluster, clusterManager); err != nil {
+		if err := approver.CreateIAMRolesAndPolicies(ctx, cluster); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -184,7 +183,7 @@ func (a *NoopApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) e
 	return nil
 }
 
-func (a *NoopApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *clustermanagerv1.ClusterManager) error {
+func (a *NoopApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 	return nil
 }
 

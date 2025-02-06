@@ -15,13 +15,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	v1 "open-cluster-management.io/api/cluster/v1"
-	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/ocm/manifests"
 	commonhelpers "open-cluster-management.io/ocm/pkg/common/helpers"
 	"open-cluster-management.io/ocm/pkg/registration/register"
 )
 
 type AwsIrsaApprover struct {
+	hubClusterArn string
 }
 
 // Cleanup implements register.Approver.
@@ -39,8 +39,7 @@ func (a *AwsIrsaApprover) Run(ctx context.Context, workers int) {
 // Cleanup is run when the cluster is deleting or hubAcceptClient is set false
 
 // CreateIAMRolesAndPolicies implements register.Approver.
-func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *clustermanagerv1.ClusterManager) error {
-	registrationDrivers := clusterManager.Spec.RegistrationConfiguration.RegistrationDrivers
+func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 
 	//Creating config for aws
 	cfg, err := config.LoadDefaultConfig(context.TODO())
@@ -51,7 +50,7 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	// Create an IAM client
 	iamClient := iam.NewFromConfig(cfg)
 	eksClient := eks.NewFromConfig(cfg)
-	err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx, registrationDrivers, cluster, iamClient, eksClient)
+	err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx, a.hubClusterArn, cluster, iamClient, eksClient)
 	if err != nil {
 		fmt.Println("Failed to create IAM roles, policies and access entry for aws irsa", err)
 		log.Fatal(err)
@@ -60,15 +59,8 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	return nil
 }
 
-func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, RegistrationDrivers []clustermanagerv1.RegistrationDriverHub, managedCluster *v1.ManagedCluster, iamClient *iam.Client, eksClient *eks.Client) error {
-	var hubClusterArn string
+func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, iamClient *iam.Client, eksClient *eks.Client) error {
 	var managedClusterIamRoleSuffix string
-	// Iterate through RegistrationDrivers and retrieve the HubClusterArn
-	for _, registrationDriver := range RegistrationDrivers {
-		if registrationDriver.AuthType == "awsirsa" {
-			hubClusterArn = registrationDriver.HubClusterArn
-		}
-	}
 	if hubClusterArn != "" && managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"] != "" && managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"] != "" {
 		managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
 		managedClusterArn := managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
@@ -134,7 +126,7 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 				log.Printf("Failed to create IAM Policy:%s %v\n", err, roleName)
 				return err
 			} else {
-				log.Printf("Ignore IAM policy creation error as entity already exists %v" , err)
+				log.Printf("Ignore IAM policy creation error as entity already exists %v", err)
 				policyArn, err = getPolicyArnByName(iamClient, policyName)
 				if err != nil {
 					log.Fatalf("error retrieving policy ARN: %v", err)
@@ -143,7 +135,6 @@ func CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(ctx context.Context, Registr
 		} else {
 			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 		}
-
 
 		if createPolicyResult != nil {
 			policyArn = *createPolicyResult.Policy.Arn
@@ -216,8 +207,10 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 	return
 }
 
-func NewAwsIrsaApprover() (register.Approver, error) {
-	awsIrsaApprover := &AwsIrsaApprover{}
+func NewAwsIrsaApprover(hubClusterArn string) (register.Approver, error) {
+	awsIrsaApprover := &AwsIrsaApprover{
+		hubClusterArn: hubClusterArn,
+	}
 	return awsIrsaApprover, nil
 }
 

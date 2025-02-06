@@ -12,7 +12,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	clustermanagerv1 "open-cluster-management.io/api/operator/v1"
 )
 
 const (
@@ -90,5 +89,5 @@ type Approver interface {
 
 	// CreateIAMRole is executed when hubAcceptClient in ManagedCluster is set to true. The hub controller creates the
 	// required IAM roles for the spoke to be able to access resources on the hub cluster.
-	CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, clusterManager *clustermanagerv1.ClusterManager) error
+	CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error
 }
