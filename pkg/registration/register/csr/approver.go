@@ -168,6 +168,11 @@ func (c *CSRApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) er
 	return nil
 }
 
+func (c *CSRApprover) AutoApprove(ctx context.Context, csrUser string, approvedCsrUsers []string) bool {
+	// noop
+	return false
+}
+
 func NewCSRApprover(
 	kubeClient kubernetes.Interface,
 	kubeInformers informers.SharedInformerFactory,

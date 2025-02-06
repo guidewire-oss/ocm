@@ -86,4 +86,7 @@ type Approver interface {
 	// Cleanup is executed when hubAcceptClient in ManagedCluster is set false or cluster is deleting. The hub controller
 	// deletes rolebindings for the agent, and then this is the additional operation a driver should process.
 	Cleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error
+
+	// AutoApprove is executed in the managed cluster controller to auto approve the cluster with list of identities whitelisted. 
+	AutoApprove(ctx context.Context, entityId string) bool
 }

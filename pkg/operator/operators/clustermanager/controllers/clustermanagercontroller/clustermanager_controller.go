@@ -182,6 +182,15 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 	if clusterManager.Spec.RegistrationConfiguration != nil {
 		registrationFeatureGates = clusterManager.Spec.RegistrationConfiguration.FeatureGates
 		config.AutoApproveUsers = strings.Join(clusterManager.Spec.RegistrationConfiguration.AutoApproveUsers, ",")
+
+		autoApprovalIdentities := clusterManager.Spec.RegistrationConfiguration.AutoApprovalIdentities
+		for _, approvedIdentities := range autoApprovalIdentities {
+			if approvedIdentities.Driver == "csr" {
+				config.AutoApproveCsrUsers = approvedIdentities.Identities
+			} else if approvedIdentities.Driver == "awsirsa" {
+				config.AutoApproveAwsPatterns = approvedIdentities.Identities
+			}
+		}
 	}
 	config.RegistrationFeatureGates, registrationFeatureMsgs = helpers.ConvertToFeatureGateFlags("Registration",
 		registrationFeatureGates, ocmfeature.DefaultHubRegistrationFeatureGates)

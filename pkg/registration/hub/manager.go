@@ -42,6 +42,7 @@ import (
 	"open-cluster-management.io/ocm/pkg/registration/hub/taint"
 	"open-cluster-management.io/ocm/pkg/registration/register"
 	"open-cluster-management.io/ocm/pkg/registration/register/csr"
+	awsirsa "open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 )
 
 // HubManagerOptions holds configuration for hub manager controller
@@ -49,6 +50,8 @@ type HubManagerOptions struct {
 	ClusterAutoApprovalUsers []string
 	GCResourceList           []string
 	ImportOption             *importeroptions.Options
+	AutoApprovalCsrUsers     []string 
+	AutoApprovalAwsPatterns  []string
 }
 
 // NewHubManagerOptions returns a HubManagerOptions
@@ -68,6 +71,8 @@ func (m *HubManagerOptions) AddFlags(fs *pflag.FlagSet) {
 		"A list GVR user can customize which are cleaned up after cluster is deleted. Format is group/version/resource, "+
 			"and the default are managedclusteraddon and manifestwork. The resources will be deleted in order."+
 			"The flag works only when ResourceCleanup feature gate is enable.")
+	fs.StringSliceVar(&m.AutoApprovalCsrUsers, "auto-approved-csr-users", m.AutoApprovalCsrUsers, "")
+	fs.StringSliceVar(&m.AutoApprovalAwsPatterns, "auto-approved-aws-patterns", m.AutoApprovalAwsPatterns, "")
 	m.ImportOption.AddFlags(fs)
 }
 
@@ -152,7 +157,12 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		return err
 	}
 
-	approver := register.NewAggregatedApprover(csrApprover)
+	awsIrsaApprover, err := awsirsa.NewAwsIrsaApprover(m.AutoApprovalAwsPatterns)
+	if err != nil {
+		return err
+	}
+
+	approver := register.NewAggregatedApprover(csrApprover, awsIrsaApprover)
 
 	managedClusterController := managedcluster.NewManagedClusterController(
 		kubeClient,

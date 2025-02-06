@@ -33,6 +33,8 @@ type HubConfig struct {
 	// The type has to be []byte to use "indent" template function.
 	ResourceRequirements              []byte
 	ManagedClusterIdentityCreatorRole string
+	AutoApproveCsrUsers			   []string 
+	AutoApproveAwsPatterns         []string
 }
 
 type Webhook struct {

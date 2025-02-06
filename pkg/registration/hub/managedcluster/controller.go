@@ -29,6 +29,7 @@ import (
 	"open-cluster-management.io/ocm/pkg/common/queue"
 	"open-cluster-management.io/ocm/pkg/features"
 	"open-cluster-management.io/ocm/pkg/registration/helpers"
+	"open-cluster-management.io/ocm/pkg/registration/hub"
 	"open-cluster-management.io/ocm/pkg/registration/hub/manifests"
 	"open-cluster-management.io/ocm/pkg/registration/register"
 )
@@ -108,6 +109,8 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 		// the cleanup job is moved to gc controller
 		return nil
 	}
+
+	c.approver.AutoApprove(ctx, managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"], )
 
 	if features.HubMutableFeatureGate.Enabled(ocmfeature.ManagedClusterAutoApproval) {
 		// If the ManagedClusterAutoApproval feature is enabled, we automatically accept a cluster only
