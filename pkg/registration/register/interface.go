@@ -2,11 +2,11 @@ package register
 
 import (
 	"context"
-
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -89,5 +89,5 @@ type Approver interface {
 
 	// CreateIAMRole is executed when hubAcceptClient in ManagedCluster is set to true. The hub controller creates the
 	// required IAM roles for the spoke to be able to access resources on the hub cluster.
-	CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error
+	CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster , kubeclient kubernetes.Interface) error
 }

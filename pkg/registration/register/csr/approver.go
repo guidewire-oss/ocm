@@ -168,7 +168,7 @@ func (c *CSRApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) er
 	return nil
 }
 
-func (c *CSRApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
+func (c *CSRApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, kubeclient kubernetes.Interface ) error {
 	//noop
 	return nil
 }

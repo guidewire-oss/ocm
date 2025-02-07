@@ -365,13 +365,12 @@ func TestCreateIAMRolesAndPoliciesForAWSIRSA(t *testing.T) {
 			}
 
 			iamClient := iam.NewFromConfig(cfg)
-			eksClient := eks.NewFromConfig(cfg)
 			HubClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster"
 
 			managedCluster := testinghelpers.NewManagedCluster()
 			managedCluster.Annotations = tt.managedClusterAnnotations
 
-			err = CreateIAMRolesPoliciesAndAccessEntryForAWSIRSA(tt.args.ctx, HubClusterArn, managedCluster, iamClient, eksClient)
+			_,_,_,err = CreateIAMRolesPoliciesForAWSIRSA(tt.args.ctx, HubClusterArn, managedCluster, iamClient)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("error = %#v, wantErr %#v", err, tt.wantErr)
 				return

@@ -3,9 +3,12 @@ package aws_irsa
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"html/template"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"log"
 	"strings"
 
@@ -40,7 +43,7 @@ func (a *AwsIrsaApprover) Run(ctx context.Context, workers int) {
 // Cleanup is run when the cluster is deleting or hubAcceptClient is set false
 
 // CreateIAMRolesAndPolicies implements register.Approver.
-func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
+func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster, kubeclient kubernetes.Interface  ) error {
 
 	//Creating config for aws
 	cfg, err := config.LoadDefaultConfig(context.TODO())
@@ -58,15 +61,21 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	})
 
 	if describeClusterOutput.Cluster.AccessConfig.AuthenticationMode == types.AuthenticationModeConfigMap {
-			//patch configmap
+		err = patchAuthConfigMapForAWSIRSA(principalArn, managedClusterName,kubeclient )
+		if err != nil {
+			fmt.Println("Failed to update aws-auth configmap for aws irsa", err)
+			return err
+		}
 	} else {
-		err =	createAccessEntriesForAWSIRSA(ctx, eksClient, principalArn, hubclusterName , managedClusterName)
+		err = createAccessEntriesForAWSIRSA(ctx, eksClient, principalArn, hubclusterName , managedClusterName)
+		if err != nil {
+			fmt.Println("Failed to create Access Entries for aws irsa", err)
+		}
 	}
 	if err != nil {
-		fmt.Println("Failed to create IAM roles, policies and access entry for aws irsa", err)
-		log.Fatal(err)
+		fmt.Println("Failed to create IAM roles, policies and access entry/aws-auth configmap for aws irsa", err)
+		return err
 	}
-
 	return nil
 }
 
@@ -243,24 +252,53 @@ func getPolicyArnByName(client *iam.Client, policyName string) (string, error) {
 
 
 func createAccessEntriesForAWSIRSA(ctx context.Context,eksClient *eks.Client , principalArn string , hubClusterName string , managedClusterName string) error {
+	params := &eks.CreateAccessEntryInput{
+		ClusterName:      aws.String(hubClusterName),
+		PrincipalArn:     aws.String(principalArn),
+		Username:         aws.String(managedClusterName),
+		KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
+		}
 
-params := &eks.CreateAccessEntryInput{
-	ClusterName:      aws.String(hubClusterName),
-	PrincipalArn:     aws.String(principalArn),
-	Username:         aws.String(managedClusterName),
-	KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
+	createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
+	if err != nil {
+		if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
+		log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
+		return err
+		} else {
+		log.Printf("Ignore Access entry creation error as entity already exists")
+		}
+	}
+	fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
+	return nil
+}
+
+func patchAuthConfigMapForAWSIRSA( principalArn string, managedClusterName string, kubeclient kubernetes.Interface) error {
+	configMap, err := kubeclient.CoreV1().ConfigMaps("kube-system").Get(context.TODO(), "aws-auth", metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Could not get config map aws-auth in the namespace aws-auth configmap")
+		return err
 	}
 
-createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
-if err != nil {
-	if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
-	log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
-	return err
-	} else {
-	log.Printf("Ignore Access entry creation error as entity already exists")
+	var mapRoles []map[string]string
+	err = json.Unmarshal([]byte(configMap.Data["mapRoles"]), &mapRoles);
+	if err != nil {
+		log.Printf("Failed to unmarshal mapRoles: %v", err)
+		return err
 	}
-}
-fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
-return nil
-}
 
+	newRole := map[string]string{
+		"rolearn":  principalArn,
+		"groups":   "system:open-cluster-management:"+managedClusterName,
+	}
+	mapRoles = append(mapRoles, newRole)
+	jsonMap,err := json.Marshal(mapRoles)
+	configMap.Data["mapRoles"] =  string(jsonMap)
+
+	_, err = kubeclient.CoreV1().ConfigMaps("kube-system").Update(context.TODO(),configMap , metav1.UpdateOptions{})
+	if err!=nil{
+		log.Printf("Failed to update aws-auth configmap", err)
+		return err
+	}
+	log.Printf("Aws-auth configmap updated.")
+	return nil
+}

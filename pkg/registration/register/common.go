@@ -3,6 +3,7 @@ package register
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 	"os"
 	"reflect"
 
@@ -158,10 +159,10 @@ func (a *AggregatedApprover) Cleanup(ctx context.Context, cluster *clusterv1.Man
 }
 
 // CreateIAMRolesAndPolicies implements Approver.
-func (a *AggregatedApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
+func (a *AggregatedApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster ,kubeclient kubernetes.Interface) error {
 	var errs []error
 	for _, approver := range a.approvers {
-		if err := approver.CreateIAMRolesAndPolicies(ctx, cluster); err != nil {
+		if err := approver.CreateIAMRolesAndPolicies(ctx, cluster, kubeclient); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -183,7 +184,7 @@ func (a *NoopApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) e
 	return nil
 }
 
-func (a *NoopApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
+func (a *NoopApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster *clusterv1.ManagedCluster , kubeclient kubernetes.Interface) error {
 	return nil
 }
 

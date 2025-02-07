@@ -212,7 +212,7 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 			errs = append(errs, err)
 		}
 
-		err = c.approver.CreateIAMRolesAndPolicies(ctx, managedCluster)
+		err = c.approver.CreateIAMRolesAndPolicies(ctx, managedCluster , c.kubeClient)
 		if err != nil {
 			fmt.Println("Failed to create IAM roles and policies for aws irsa", err)
 			errs = append(errs, err)
