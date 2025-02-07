@@ -245,22 +245,22 @@ func getPolicyArnByName(client *iam.Client, policyName string) (string, error) {
 func createAccessEntriesForAWSIRSA(ctx context.Context,eksClient *eks.Client , principalArn string , hubClusterName string , managedClusterName string) error {
 
 params := &eks.CreateAccessEntryInput{
-ClusterName:      aws.String(hubClusterName),
-PrincipalArn:     aws.String(principalArn),
-Username:         aws.String(managedClusterName),
-KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
-}
+	ClusterName:      aws.String(hubClusterName),
+	PrincipalArn:     aws.String(principalArn),
+	Username:         aws.String(managedClusterName),
+	KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
+	}
 
 createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
 if err != nil {
-if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
-log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
-return err
-} else {
-log.Printf("Ignore Access entry creation error as entity already exists")
-}
-
+	if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
+	log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
+	return err
+	} else {
+	log.Printf("Ignore Access entry creation error as entity already exists")
+	}
 }
 fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
-
+return nil
 }
+
