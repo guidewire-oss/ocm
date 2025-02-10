@@ -54,11 +54,17 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	// Create an IAM client
 	iamClient := iam.NewFromConfig(cfg)
 	eksClient := eks.NewFromConfig(cfg)
+	log.Printf("HubClusterArn = %v", a.hubClusterArn)
 	hubclusterName , managedClusterName, principalArn ,err := CreateIAMRolesPoliciesForAWSIRSA(ctx, a.hubClusterArn, cluster, iamClient)
 	_,hubClusterName := commonhelpers.GetAwsAccountIdAndClusterName(a.hubClusterArn)
+	log.Printf("HubClusterArn = %v", a.hubClusterArn)
 	describeClusterOutput,err := eksClient.DescribeCluster(context.TODO(), &eks.DescribeClusterInput{
 		Name:                 aws.String(hubClusterName),
 	})
+	if err != nil {
+		fmt.Println("Failed to describe cluster with the arn ", a.hubClusterArn, err)
+		return err
+	}
 
 	if describeClusterOutput.Cluster.AccessConfig.AuthenticationMode == types.AuthenticationModeConfigMap {
 		err = patchAuthConfigMapForAWSIRSA(principalArn, managedClusterName,kubeclient )
@@ -86,6 +92,10 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 	var createRoleOutput *iam.CreateRoleOutput
 	var hubclusterName string
 	var managedClusterName string
+	var principalArn string
+	log.Printf("HubClusterArn = %v",hubClusterArn)
+	log.Printf("managedCluster.Annotations[agent.open-cluster-management.io/managed-cluster-iam-role-suffix = %v", managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"])
+	log.Printf("managedCluster.Annotations[agent.open-cluster-management.io/managed-cluster-arn = %v",managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"] )
 	if hubClusterArn != "" && managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"] != "" && managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"] != "" {
 		managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
 		managedClusterArn := managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
@@ -174,13 +184,11 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 			log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", policyArn, roleName, err)
 			return "","","",err
 		}
-	}
-
-	var principalArn string
-	if getRoleOutput != nil {
-		principalArn = *getRoleOutput.Role.Arn
-	} else {
-		principalArn = *createRoleOutput.Role.Arn
+		if getRoleOutput != nil {
+			principalArn = *getRoleOutput.Role.Arn
+		} else {
+			principalArn = *createRoleOutput.Role.Arn
+		}
 	}
 	return hubclusterName,managedClusterName,principalArn,nil
 }
