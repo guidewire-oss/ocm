@@ -168,9 +168,9 @@ func (c *CSRApprover) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) er
 	return nil
 }
 
-func (c *CSRApprover) AutoApprove(ctx context.Context, csrUser string, approvedCsrUsers []string) bool {
+func (c *CSRApprover) AutoApprove(ctx context.Context, csrUser string) bool {
 	// noop
-	return false
+	return true
 }
 
 func NewCSRApprover(

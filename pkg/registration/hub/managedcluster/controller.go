@@ -29,7 +29,6 @@ import (
 	"open-cluster-management.io/ocm/pkg/common/queue"
 	"open-cluster-management.io/ocm/pkg/features"
 	"open-cluster-management.io/ocm/pkg/registration/helpers"
-	"open-cluster-management.io/ocm/pkg/registration/hub"
 	"open-cluster-management.io/ocm/pkg/registration/hub/manifests"
 	"open-cluster-management.io/ocm/pkg/registration/register"
 )
@@ -110,12 +109,15 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 		return nil
 	}
 
-	c.approver.AutoApprove(ctx, managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"], )
-
 	if features.HubMutableFeatureGate.Enabled(ocmfeature.ManagedClusterAutoApproval) {
+
+		// If auth driver is awsirsa, it returns true if the managedClusterArn matches any pattern for auto approval
+		// If auth driver is csr, AutoApprove method is a no-op and it returns true always
+		canBeAutoApproved := c.approver.AutoApprove(ctx, managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"])
+
 		// If the ManagedClusterAutoApproval feature is enabled, we automatically accept a cluster only
 		// when it joins for the first time, afterwards users can deny it again.
-		if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok {
+		if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok && canBeAutoApproved {
 			return c.acceptCluster(ctx, managedCluster)
 		}
 	}
