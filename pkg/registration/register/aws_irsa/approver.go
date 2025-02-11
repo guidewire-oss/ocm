@@ -296,7 +296,7 @@ func patchAuthConfigMapForAWSIRSA( principalArn string, managedClusterName strin
 	}
 	mapRoles:= configMap.Data["mapRoles"]
 	log.Printf("mapRoles: %v",mapRoles)
-	newRole:= fmt.Sprintf("- rolearn: %v\n  groups:\n    - system:open-cluster-management:%v",principalArn,managedClusterName)
+	newRole:= fmt.Sprintf("- rolearn: %v\n  groups:\n    - system:open-cluster-management:%v\n",principalArn,managedClusterName)
 	log.Printf("newRole: %v",newRole)
 	configMap.Data["mapRoles"] = mapRoles+newRole
 	log.Printf("configMap.Data[maproles]: %v",configMap.Data["mapRoles"])
