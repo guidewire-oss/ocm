@@ -93,9 +93,11 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 	var managedClusterIamRoleSuffix string
 	var getRoleOutput *iam.GetRoleOutput
 	var createRoleOutput *iam.CreateRoleOutput
-	var hubclusterName string
+	var hubClusterName string
 	var managedClusterName string
 	var principalArn string
+	var hubAccountId string
+	var managedClusterAccountId string
 	log.Printf("HubClusterArn = %v",hubClusterArn)
 	log.Printf("managedCluster.Annotations[agent.open-cluster-management.io/managed-cluster-iam-role-suffix = %v", managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"])
 	log.Printf("managedCluster.Annotations[agent.open-cluster-management.io/managed-cluster-arn = %v",managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"] )
@@ -103,8 +105,8 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		managedClusterIamRoleSuffix = managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
 		managedClusterArn := managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
 
-		managedClusterAccountId, managedClusterName := commonhelpers.GetAwsAccountIdAndClusterName(managedClusterArn)
-		hubAccountId, hubClusterName := commonhelpers.GetAwsAccountIdAndClusterName(hubClusterArn)
+		managedClusterAccountId, managedClusterName = commonhelpers.GetAwsAccountIdAndClusterName(managedClusterArn)
+		hubAccountId, hubClusterName = commonhelpers.GetAwsAccountIdAndClusterName(hubClusterArn)
 		// Define the role name and trust policy
 		roleName := "ocm-hub-" + managedClusterIamRoleSuffix
 		policyName := "ocm-hub-" + managedClusterIamRoleSuffix
@@ -114,7 +116,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		log.Printf("hash = %v managedClusterIamRoleSuffix = %v ",hash, managedClusterIamRoleSuffix)
 		if hash != managedClusterIamRoleSuffix {
 			err := fmt.Errorf("hub cluster arn provided during join is different from the current hub cluster")
-			return "","","",err
+			return hubClusterName,managedClusterName,principalArn,err
 		}
 
 		templateFiles := []string{"managed-cluster-policy/AccessPolicy.tmpl", "managed-cluster-policy/TrustPolicy.tmpl"}
@@ -129,7 +131,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		renderedTemplates, err := renderTemplates(templateFiles, data)
 		if err != nil {
 			log.Printf("Failed to render templates while creating IAM role and policy %v", err)
-			return "","","",err
+			return hubClusterName,managedClusterName,principalArn,err
 		}
 
 
@@ -141,7 +143,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 			// Ignore error when role already exists as we will always create the same role
 			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
 				log.Printf("Failed to create IAM role: %v\n", err)
-				return "","","",err
+				return hubClusterName,managedClusterName,principalArn,err
 			} else {
 				log.Printf("Ignore IAM role creation error as entity already exists")
 				getRoleOutput, err = iamClient.GetRole(context.TODO(), &iam.GetRoleInput{
@@ -149,7 +151,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 				})
 				if err != nil {
 					log.Printf("Failed to get IAM role: %v\n", err)
-					return "","","",err
+					return hubClusterName,managedClusterName,principalArn,err
 				}
 			}
 		} else {
@@ -164,7 +166,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		if err != nil {
 			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
 				log.Printf("Failed to create IAM Policy:%s %v\n", err, roleName)
-				return "","","",err
+				return hubClusterName,managedClusterName,principalArn,err
 			} else {
 				log.Printf("Ignore IAM policy creation error as entity already exists %v", err)
 				policyArn, err = getPolicyArnByName(iamClient, policyName)
@@ -186,7 +188,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		})
 		if err != nil {
 			log.Printf("Couldn't attach policy %v to role %v. Here's why: %v\n", policyArn, roleName, err)
-			return "","","",err
+			return hubClusterName,managedClusterName,principalArn,err
 		}
 		if getRoleOutput != nil {
 			principalArn = *getRoleOutput.Role.Arn
@@ -196,7 +198,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		log.Printf("Created IAM Role %v and policy %v. \n", roleName, policyArn)
 
 	}
-	return hubclusterName,managedClusterName,principalArn,nil
+	return hubClusterName,managedClusterName,principalArn,nil
 }
 
 
