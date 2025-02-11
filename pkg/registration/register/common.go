@@ -133,6 +133,16 @@ type AggregatedApprover struct {
 	approvers []Approver
 }
 
+func (a *AggregatedApprover) AutoApprove(ctx context.Context, entityId string, cluster *clusterv1.ManagedCluster) error {
+	var errs []error
+	for _, approver := range a.approvers {
+		if err := approver.AutoApprove(ctx, entityId, cluster); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.NewAggregate(errs)
+}
+
 func NewAggregatedApprover(approvers ...Approver) Approver {
 	return &AggregatedApprover{
 		approvers: approvers,
@@ -159,6 +169,10 @@ func (a *AggregatedApprover) Cleanup(ctx context.Context, cluster *clusterv1.Man
 
 // NoopApprover is an approver with no operation, for testing
 type NoopApprover struct{}
+
+func (a *NoopApprover) AutoApprove(ctx context.Context, entityId string, cluster *clusterv1.ManagedCluster) error {
+	return nil
+}
 
 func NewNoopApprover() Approver {
 	return &NoopApprover{}

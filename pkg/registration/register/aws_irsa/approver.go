@@ -22,7 +22,7 @@ import (
 )
 
 type AwsIrsaApprover struct {
-	arnPatterns []string 
+	arnPatterns []string
 }
 
 // Cleanup implements register.Approver.
@@ -37,16 +37,24 @@ func (a *AwsIrsaApprover) Run(ctx context.Context, workers int) {
 	return
 }
 
-func (a *AwsIrsaApprover) AutoApprove(ctx context.Context, managedClusterArn string) bool {
-	for _, arnPattern := range a.arnPatterns {
-		re, err := regexp.Compile(arnPattern)
-		if err == nil {
-			if re.MatchString(managedClusterArn) {
-				return true
+// AutoApprove Checks if the managed cluster arn matches any approved arn pattern and sets the HubAcceptsClient = true
+// if there is a match
+func (a *AwsIrsaApprover) AutoApprove(ctx context.Context, managedClusterArn string, cluster *clusterv1.ManagedCluster) error {
+	if cluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"] != "" && cluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"] != "" {
+		for _, arnPattern := range a.arnPatterns {
+			re, err := regexp.Compile(arnPattern)
+			if err != nil {
+				fmt.Println("Failed to process the approved arn pattern for aws irsa auto approval", err)
+				return err
 			}
-		} 
+
+			if re.MatchString(managedClusterArn) {
+				// TODO
+			}
+		}
+
 	}
-	return false
+	return nil
 }
 
 // Cleanup is run when the cluster is deleting or hubAcceptClient is set false

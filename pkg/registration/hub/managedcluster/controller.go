@@ -111,13 +111,17 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 
 	if features.HubMutableFeatureGate.Enabled(ocmfeature.ManagedClusterAutoApproval) {
 
-		// If auth driver is awsirsa, it returns true if the managedClusterArn matches any pattern for auto approval
+		// If auth driver is awsirsa, it checks if the managedClusterArn matches any pattern for auto approval
 		// If auth driver is csr, AutoApprove method is a no-op and it returns true always
-		canBeAutoApproved := c.approver.AutoApprove(ctx, managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"])
+		err := c.approver.AutoApprove(ctx, managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"], managedCluster)
+		if err != nil {
+			fmt.Println("Failed to process auto approval due to error in matching the approved identities", err)
+			return err
+		}
 
 		// If the ManagedClusterAutoApproval feature is enabled, we automatically accept a cluster only
 		// when it joins for the first time, afterwards users can deny it again.
-		if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok && canBeAutoApproved {
+		if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok {
 			return c.acceptCluster(ctx, managedCluster)
 		}
 	}

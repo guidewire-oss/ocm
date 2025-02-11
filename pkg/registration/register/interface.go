@@ -87,6 +87,6 @@ type Approver interface {
 	// deletes rolebindings for the agent, and then this is the additional operation a driver should process.
 	Cleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error
 
-	// AutoApprove is executed in the managed cluster controller to auto approve the cluster with list of identities whitelisted. 
-	AutoApprove(ctx context.Context, entityId string) bool
+	// AutoApprove is executed in the managed cluster controller to auto approve the cluster based on the list of identities whitelisted.
+	AutoApprove(ctx context.Context, entityId string, cluster *clusterv1.ManagedCluster) error
 }
