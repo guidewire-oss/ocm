@@ -3,7 +3,6 @@ package aws_irsa
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"html/template"
@@ -48,7 +47,7 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	//Creating config for aws
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		fmt.Println("Failed to load aws config", err)
+		log.Printf("Failed to load aws config %v", err)
 		log.Fatal(err)
 	}
 	// Create an IAM client
@@ -56,30 +55,34 @@ func (a *AwsIrsaApprover) CreateIAMRolesAndPolicies(ctx context.Context, cluster
 	eksClient := eks.NewFromConfig(cfg)
 	log.Printf("HubClusterArn = %v", a.hubClusterArn)
 	hubclusterName , managedClusterName, principalArn ,err := CreateIAMRolesPoliciesForAWSIRSA(ctx, a.hubClusterArn, cluster, iamClient)
+	if err != nil {
+		log.Printf("Failed to create IAM Roles and Policies %v", err)
+		return err
+	}
 	_,hubClusterName := commonhelpers.GetAwsAccountIdAndClusterName(a.hubClusterArn)
 	log.Printf("HubClusterArn = %v", a.hubClusterArn)
 	describeClusterOutput,err := eksClient.DescribeCluster(context.TODO(), &eks.DescribeClusterInput{
 		Name:                 aws.String(hubClusterName),
 	})
 	if err != nil {
-		fmt.Println("Failed to describe cluster with the arn ", a.hubClusterArn, err)
+		log.Printf("Failed to describe cluster with the arn %v because of error %v", a.hubClusterArn, err)
 		return err
 	}
 
 	if describeClusterOutput.Cluster.AccessConfig.AuthenticationMode == types.AuthenticationModeConfigMap {
 		err = patchAuthConfigMapForAWSIRSA(principalArn, managedClusterName,kubeclient )
 		if err != nil {
-			fmt.Println("Failed to update aws-auth configmap for aws irsa", err)
+			log.Printf("Failed to update aws-auth configmap for aws irsa %v", err)
 			return err
 		}
 	} else {
 		err = createAccessEntriesForAWSIRSA(ctx, eksClient, principalArn, hubclusterName , managedClusterName)
 		if err != nil {
-			fmt.Println("Failed to create Access Entries for aws irsa", err)
+			log.Printf("Failed to create Access Entries for aws irsa %v", err)
 		}
 	}
 	if err != nil {
-		fmt.Println("Failed to create IAM roles, policies and access entry/aws-auth configmap for aws irsa", err)
+		log.Printf("Failed to create IAM roles, policies and access entry/aws-auth configmap for aws irsa %v", err)
 		return err
 	}
 	return nil
@@ -108,6 +111,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 
 		// Check if hash is the same
 		hash := commonhelpers.Md5HashSuffix(hubAccountId, hubClusterName, managedClusterAccountId, managedClusterName)
+		log.Printf("hash = %v managedClusterIamRoleSuffix = %v ",hash, managedClusterIamRoleSuffix)
 		if hash != managedClusterIamRoleSuffix {
 			err := fmt.Errorf("hub cluster arn provided during join is different from the current hub cluster")
 			return "","","",err
@@ -124,7 +128,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		}
 		renderedTemplates, err := renderTemplates(templateFiles, data)
 		if err != nil {
-			fmt.Println("Failed to render templates while creating IAM role and policy", err)
+			log.Printf("Failed to render templates while creating IAM role and policy %v", err)
 			return "","","",err
 		}
 
@@ -149,7 +153,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 				}
 			}
 		} else {
-			fmt.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
+			log.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 		}
 
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
@@ -169,7 +173,7 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 				}
 			}
 		} else {
-			fmt.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
+			log.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 		}
 
 		if createPolicyResult != nil {
@@ -189,6 +193,8 @@ func CreateIAMRolesPoliciesForAWSIRSA(ctx context.Context, hubClusterArn string,
 		} else {
 			principalArn = *createRoleOutput.Role.Arn
 		}
+		log.Printf("Created IAM Role %v and policy %v. \n", roleName, policyArn)
+
 	}
 	return hubclusterName,managedClusterName,principalArn,nil
 }
@@ -276,7 +282,7 @@ func createAccessEntriesForAWSIRSA(ctx context.Context,eksClient *eks.Client , p
 		log.Printf("Ignore Access entry creation error as entity already exists")
 		}
 	}
-	fmt.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
+	log.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
 	return nil
 }
 
@@ -286,22 +292,12 @@ func patchAuthConfigMapForAWSIRSA( principalArn string, managedClusterName strin
 		log.Printf("Could not get config map aws-auth in the namespace aws-auth configmap")
 		return err
 	}
-
-	var mapRoles []map[string]string
-	err = json.Unmarshal([]byte(configMap.Data["mapRoles"]), &mapRoles);
-	if err != nil {
-		log.Printf("Failed to unmarshal mapRoles: %v", err)
-		return err
-	}
-
-	newRole := map[string]string{
-		"rolearn":  principalArn,
-		"groups":   "system:open-cluster-management:"+managedClusterName,
-	}
-	mapRoles = append(mapRoles, newRole)
-	jsonMap,err := json.Marshal(mapRoles)
-	configMap.Data["mapRoles"] =  string(jsonMap)
-
+	mapRoles:= configMap.Data["mapRoles"]
+	log.Printf("mapRoles: %v",mapRoles)
+	newRole:= fmt.Sprintf("- rolearn: %v\n  groups:\n    - system:open-cluster-management:%v",principalArn,managedClusterName)
+	log.Printf("newRole: %v",newRole)
+	configMap.Data["mapRoles"] = mapRoles+newRole
+	log.Printf("configMap.Data[maproles]: %v",configMap.Data["mapRoles"])
 	_, err = kubeclient.CoreV1().ConfigMaps("kube-system").Update(context.TODO(),configMap , metav1.UpdateOptions{})
 	if err!=nil{
 		log.Printf("Failed to update aws-auth configmap", err)

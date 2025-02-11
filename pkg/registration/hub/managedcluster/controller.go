@@ -3,6 +3,7 @@ package managedcluster
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"time"
 
@@ -208,13 +209,13 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 	// Only create new IAM roles when status is not present
 	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, v1.ManagedClusterConditionHubAccepted) {
 		if err != nil {
-			fmt.Println("Failed to get cluster manager", err)
+			log.Printf("Failed to get cluster manager %v", err)
 			errs = append(errs, err)
 		}
 
 		err = c.approver.CreateIAMRolesAndPolicies(ctx, managedCluster , c.kubeClient)
 		if err != nil {
-			fmt.Println("Failed to create IAM roles and policies for aws irsa", err)
+			log.Printf("Failed to create IAM roles and policies for aws irsa %v", err)
 			errs = append(errs, err)
 		}
 	}
