@@ -41,6 +41,7 @@ import (
 	"open-cluster-management.io/ocm/pkg/registration/hub/managedclustersetbinding"
 	"open-cluster-management.io/ocm/pkg/registration/hub/taint"
 	"open-cluster-management.io/ocm/pkg/registration/register"
+	"open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 	awsirsa "open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 	"open-cluster-management.io/ocm/pkg/registration/register/csr"
 )
@@ -52,6 +53,8 @@ type HubManagerOptions struct {
 	GCResourceList             []string
 	ImportOption               *importeroptions.Options
 	HubClusterArn              string
+	AutoApprovalCsrUsers       []string
+	AutoApprovalAwsPatterns    []string
 }
 
 // NewHubManagerOptions returns a HubManagerOptions
@@ -76,6 +79,8 @@ func (m *HubManagerOptions) AddFlags(fs *pflag.FlagSet) {
 			"The flag works only when ResourceCleanup feature gate is enable.")
 	fs.StringVar(&m.HubClusterArn, "hub-cluster-arn", m.HubClusterArn,
 		"Hub Cluster Arn required to connect to Hub and create IAM Roles and Policies")
+	fs.StringSliceVar(&m.AutoApprovalCsrUsers, "auto-approved-csr-users", m.AutoApprovalCsrUsers, "")
+	fs.StringSliceVar(&m.AutoApprovalAwsPatterns, "auto-approved-aws-patterns", m.AutoApprovalAwsPatterns, "")
 	m.ImportOption.AddFlags(fs)
 }
 
@@ -178,6 +183,12 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	approver := register.NewAggregatedApprover(approvers...)
 	hubDriver := register.NewAggregatedHubDriver(drivers...)
 
+	csrAcceptor := csr.NewCsrAcceptor(m.AutoApprovalCsrUsers)
+
+	awsIrsaAcceptor := aws_irsa.NewAwsIrsaAcceptor(m.AutoApprovalAwsPatterns)
+
+	acceptor := register.NewAggregatedAcceptor(csrAcceptor, awsIrsaAcceptor)
+
 	managedClusterController := managedcluster.NewManagedClusterController(
 		kubeClient,
 		clusterClient,
@@ -186,6 +197,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		kubeInformers.Rbac().V1().ClusterRoles(),
 		kubeInformers.Rbac().V1().RoleBindings(),
 		kubeInformers.Rbac().V1().ClusterRoleBindings(),
+		acceptor,
 		approver,
 		hubDriver,
 		controllerContext.EventRecorder,

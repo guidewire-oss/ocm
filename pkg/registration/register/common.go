@@ -157,6 +157,39 @@ func (a *AggregatedApprover) Cleanup(ctx context.Context, cluster *clusterv1.Man
 	return errors.NewAggregate(errs)
 }
 
+// AggregatedAcceptor is a list of acceptor that hub controller will run at the same time
+type AggregatedAcceptor struct {
+	acceptors []Acceptor
+}
+
+func NewAggregatedAcceptor(acceptors ...Acceptor) Acceptor {
+	return &AggregatedAcceptor{
+		acceptors: acceptors,
+	}
+}
+
+func (a *AggregatedAcceptor) Accept(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
+	for _, acceptor := range a.acceptors {
+		accept, err := acceptor.Accept(ctx, cluster)
+		if err == nil && accept {
+			return accept, nil
+		}
+	}
+	return false, nil
+}
+
+// NoopAcceptor is an acceptor with no operation for testing.
+type NoopAcceptor struct{}
+
+func NewNoopAcceptor() Acceptor {
+	return &NoopAcceptor{}
+}
+
+// Accept implements Acceptor.
+func (n *NoopAcceptor) Accept(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
+	return true, nil
+}
+
 // NoopApprover is an approver with no operation, for testing
 type NoopApprover struct{}
 

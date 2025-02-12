@@ -210,6 +210,7 @@ var _ = ginkgo.BeforeSuite(func() {
 			m := hub.NewHubManagerOptions()
 			m.ImportOption.APIServerURL = cfg.Host
 			m.ClusterAutoApprovalUsers = []string{util.AutoApprovalBootstrapUser}
+			m.AutoApprovalAwsPatterns = []string{"managed-cluster1"}
 			err := m.RunControllerManager(ctx, &controllercmd.ControllerContext{
 				KubeConfig:    cfg,
 				EventRecorder: util.NewIntegrationTestEventRecorder("hub"),

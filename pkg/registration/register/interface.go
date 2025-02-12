@@ -96,3 +96,8 @@ type HubDriver interface {
 	// required permissions for the spoke to be able to access resources on the hub cluster.
 	CreatePermissions(ctx context.Context, cluster *clusterv1.ManagedCluster) error
 }
+type Acceptor interface {
+	// Accept is executed when autoapproval is enabled to verify if the managedcluster uses csr or awsirsa and
+	// setting hubAcceptClient based on managedclusterslist
+	Accept(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error)
+}

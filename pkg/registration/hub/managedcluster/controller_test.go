@@ -191,6 +191,7 @@ func TestSyncManagedCluster(t *testing.T) {
 					kubeInformer.Rbac().V1().ClusterRoleBindings().Lister(),
 				),
 				patcher.NewPatcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus](clusterClient.ClusterV1().ManagedClusters()),
+				register.NewNoopAcceptor(),
 				register.NewNoopApprover(),
 				csr.NewCSRHubDriver(),
 				eventstesting.NewTestingEventRecorder(t)}
