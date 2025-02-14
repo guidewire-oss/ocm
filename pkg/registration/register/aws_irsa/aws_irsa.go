@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -147,10 +148,10 @@ func (a *AWSIRSADriverForHub) CreatePermissions(ctx context.Context, cluster *cl
 	if err != nil {
 		log.Printf("Failed to load aws config %v", err)
 	}
-	// Create an IAM client
-	iamClient := iam.NewFromConfig(cfg)
+
+	// Create an EKS client
 	eksClient := eks.NewFromConfig(cfg)
-	hubClusterName, principalArn, err := CreateIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, iamClient)
+	hubClusterName, principalArn, err := CreateIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, cfg)
 	if err != nil {
 		log.Printf("Failed to create IAM Roles and Policies %v", err)
 		return err
@@ -167,7 +168,7 @@ func (a *AWSIRSADriverForHub) CreatePermissions(ctx context.Context, cluster *cl
 // This function creates:
 // 1. IAM Roles and Policies in the hub cluster IAM
 // 2. Returns the hubclustername and the roleArn to be used for Access Entry creation
-func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, iamClient *iam.Client) (string, string, error) {
+func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config) (string, string, error) {
 	var managedClusterIamRoleSuffix string
 	var getRoleOutput *iam.GetRoleOutput
 	var createRoleOutput *iam.CreateRoleOutput
@@ -176,6 +177,14 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 	var roleArn string
 	var hubAccountId string
 	var managedClusterAccountId string
+
+	// Create an IAM client
+	iamClient := iam.NewFromConfig(cfg)
+	creds, err := cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		log.Printf("Failed to get IAM Credentials: %v\n", err)
+	}
+	awsAccountId := creds.AccountID
 
 	managedClusterIamRoleSuffix, isManagedClusterIamRoleSuffixPresent :=
 		managedCluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
@@ -211,7 +220,7 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 			return hubClusterName, roleArn, err
 		}
 
-		createRoleOutput, err = iamClient.CreateRole(context.TODO(), &iam.CreateRoleInput{
+		createRoleOutput, err = iamClient.CreateRole(ctx, &iam.CreateRoleInput{
 			RoleName:                 aws.String(roleName),
 			AssumeRolePolicyDocument: aws.String(renderedTemplates[1]),
 		})
@@ -222,7 +231,7 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				return hubClusterName, roleArn, err
 			} else {
 				log.Printf("Ignore IAM role creation error as entity already exists")
-				getRoleOutput, err = iamClient.GetRole(context.TODO(), &iam.GetRoleInput{
+				getRoleOutput, err = iamClient.GetRole(ctx, &iam.GetRoleInput{
 					RoleName: aws.String(roleName),
 				})
 				if err != nil {
@@ -231,27 +240,42 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				}
 			}
 		} else {
-			log.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
+			err = iam.NewRoleExistsWaiter(iamClient).Wait(ctx, &iam.GetRoleInput{
+				RoleName: aws.String(roleName),
+			}, time.Minute, func(opts *iam.RoleExistsWaiterOptions) {
+				opts.LogWaitAttempts = true // Enable automatic logging of wait attempts
+			})
+			if err != nil {
+				log.Printf("Failed attempt to wait for role %s to exist.\n", roleName)
+			} else {
+				log.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
+			}
 		}
 
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),
 			PolicyName:     aws.String(policyName),
 		})
-		var policyArn string
+		policyArn := fmt.Sprintf("arn:aws:iam::%s:policy/%s", awsAccountId, policyName)
+
 		if err != nil {
 			if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
 				log.Printf("Failed to create IAM Policy:%s %v\n", err, roleName)
 				return hubClusterName, roleArn, err
 			} else {
 				log.Printf("Ignore IAM policy creation error as entity already exists %v", err)
-				policyArn, err = getPolicyArnByName(iamClient, policyName)
-				if err != nil {
-					log.Fatalf("error retrieving policy ARN: %v", err)
-				}
 			}
 		} else {
-			log.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
+			err = iam.NewPolicyExistsWaiter(iamClient).Wait(ctx, &iam.GetPolicyInput{
+				PolicyArn: aws.String(policyArn),
+			}, time.Minute, func(opts *iam.PolicyExistsWaiterOptions) {
+				opts.LogWaitAttempts = true // Enable automatic logging of wait attempts
+			})
+			if err != nil {
+				log.Printf("Failed attempt to wait for policy %s to exist.\n", policyArn)
+			} else {
+				log.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
+			}
 		}
 
 		if createPolicyResult != nil {
@@ -305,35 +329,6 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 	return
 }
 
-func getPolicyArnByName(client *iam.Client, policyName string) (string, error) {
-	var marker *string
-	for {
-		// List policies in batches
-		output, err := client.ListPolicies(context.TODO(), &iam.ListPoliciesInput{
-			Scope:  "Local", // "Local" for customer-managed policies, "AWS" for AWS-managed
-			Marker: marker,
-		})
-		if err != nil {
-			return "", err
-		}
-
-		// Look for the policy by name
-		for _, policy := range output.Policies {
-			if *policy.PolicyName == policyName {
-				return *policy.Arn, nil
-			}
-		}
-
-		// If there's a next page, continue
-		if output.Marker == nil {
-			break
-		}
-		marker = output.Marker
-	}
-
-	return "", fmt.Errorf("policy %s not found", policyName)
-}
-
 // This function creates access entry which allow access to an IAM role from outside the cluster
 func createAccessEntry(ctx context.Context, eksClient *eks.Client, principalArn string, hubClusterName string, managedClusterName string) error {
 	params := &eks.CreateAccessEntryInput{
@@ -351,6 +346,8 @@ func createAccessEntry(ctx context.Context, eksClient *eks.Client, principalArn 
 		} else {
 			log.Printf("Ignore Access entry creation error as entity already exists")
 		}
+	} else {
+		//TODO
 	}
 	log.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
 	return nil
