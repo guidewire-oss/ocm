@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"html/template"
 	"log"
 	"strings"
@@ -144,20 +145,22 @@ func (a *AWSIRSADriverForHub) CreatePermissions(ctx context.Context, cluster *cl
 		return nil
 	}
 	//Creating config for aws
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+	//cfg, err := config.LoadDefaultConfig(ctx, config.WithRetryMaxAttempts(5))
+	cfg, err := config.LoadDefaultConfig(ctx)
+
 	if err != nil {
 		log.Printf("Failed to load aws config %v", err)
 	}
 
 	// Create an EKS client
 	eksClient := eks.NewFromConfig(cfg)
-	hubClusterName, principalArn, err := CreateIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, cfg)
+	hubClusterName, roleArn, err := CreateIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, cfg)
 	if err != nil {
 		log.Printf("Failed to create IAM Roles and Policies %v", err)
 		return err
 	}
 
-	err = createAccessEntry(ctx, eksClient, principalArn, hubClusterName, cluster.Name)
+	err = createAccessEntry(ctx, eksClient, roleArn, hubClusterName, cluster.Name)
 	if err != nil {
 		log.Printf("Failed to create Access Entries for aws irsa %v", err)
 	}
@@ -246,11 +249,17 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				opts.LogWaitAttempts = true // Enable automatic logging of wait attempts
 			})
 			if err != nil {
-				log.Printf("Failed attempt to wait for role %s to exist.\n", roleName)
+				log.Printf("Failed attempt to wait for role %s to exist because of %v\n", roleName, err)
 			} else {
 				log.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 			}
 		}
+		//----------------------testing----------------------
+		getRoleOutput2, err := iamClient.GetRole(ctx, &iam.GetRoleInput{
+			RoleName: aws.String(roleName),
+		})
+		log.Printf("RoleARN:%s\n", *getRoleOutput2.Role.Arn)
+		//----------------------testing----------------------
 
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),
@@ -272,11 +281,17 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				opts.LogWaitAttempts = true // Enable automatic logging of wait attempts
 			})
 			if err != nil {
-				log.Printf("Failed attempt to wait for policy %s to exist.\n", policyArn)
+				log.Printf("Failed attempt to wait for policy %s to exist because of %v\n", policyArn, err)
 			} else {
 				log.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 			}
 		}
+		//----------------------testing----------------------
+		getPolicyOutput, err := iamClient.GetPolicy(ctx, &iam.GetPolicyInput{
+			PolicyArn: aws.String(policyArn),
+		})
+		log.Printf("PolicyARN:%s\n", *getPolicyOutput.Policy.Arn)
+		//----------------------testing----------------------
 
 		if createPolicyResult != nil {
 			policyArn = *createPolicyResult.Policy.Arn
@@ -330,24 +345,34 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 }
 
 // This function creates access entry which allow access to an IAM role from outside the cluster
-func createAccessEntry(ctx context.Context, eksClient *eks.Client, principalArn string, hubClusterName string, managedClusterName string) error {
+func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string) error {
 	params := &eks.CreateAccessEntryInput{
 		ClusterName:      aws.String(hubClusterName),
-		PrincipalArn:     aws.String(principalArn),
+		PrincipalArn:     aws.String(roleArn),
 		Username:         aws.String(managedClusterName),
 		KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
 	}
 
-	createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params)
+	//config.WithRetryer(func() aws.Retryer {
+	//	return retry.AddWithErrorCodes(retry.NewStandard(), (*types.InvalidParameterException)(nil).ErrorCode())
+	//})
+
+	//----------------------testing----------------------
+	log.Printf("Before CreateAccessEntry:%s\n", roleArn)
+	//----------------------testing----------------------
+	createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params, func(opts *eks.Options) {
+		opts.Retryer = retry.NewStandard(func(o *retry.StandardOptions) {
+			o.MaxAttempts = 3
+			o.Backoff = retry.NewExponentialJitterBackoff(8 * time.Second)
+		})
+	})
 	if err != nil {
 		if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
-			log.Printf("Failed to create Access entry for the managed cluster  %v because of %v\n", managedClusterName, err)
+			log.Printf("Failed to create Access entry for the managed cluster %v because of %v\n", managedClusterName, err)
 			return err
 		} else {
 			log.Printf("Ignore Access entry creation error as entity already exists")
 		}
-	} else {
-		//TODO
 	}
 	log.Printf("Access entry created successfully: %s\n", *createAccessEntryOutput.AccessEntry.AccessEntryArn)
 	return nil
