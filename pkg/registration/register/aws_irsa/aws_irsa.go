@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
+	"github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"html/template"
 	"log"
 	"strings"
@@ -144,8 +145,9 @@ func (a *AWSIRSADriverForHub) CreatePermissions(ctx context.Context, cluster *cl
 	if !a.allows(cluster) {
 		return nil
 	}
+	log.Printf("ManagedCluster %s is joined using aws-irsa registration-auth", cluster.Name)
+
 	//Creating config for aws
-	//cfg, err := config.LoadDefaultConfig(ctx, config.WithRetryMaxAttempts(5))
 	cfg, err := config.LoadDefaultConfig(ctx)
 
 	if err != nil {
@@ -254,12 +256,6 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				log.Printf("Role created successfully: %s\n", *createRoleOutput.Role.Arn)
 			}
 		}
-		//----------------------testing----------------------
-		getRoleOutput2, err := iamClient.GetRole(ctx, &iam.GetRoleInput{
-			RoleName: aws.String(roleName),
-		})
-		log.Printf("RoleARN:%s\n", *getRoleOutput2.Role.Arn)
-		//----------------------testing----------------------
 
 		createPolicyResult, err := iamClient.CreatePolicy(ctx, &iam.CreatePolicyInput{
 			PolicyDocument: aws.String(renderedTemplates[0]),
@@ -286,12 +282,6 @@ func CreateIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 				log.Printf("Policy created successfully: %s\n", *createPolicyResult.Policy.Arn)
 			}
 		}
-		//----------------------testing----------------------
-		getPolicyOutput, err := iamClient.GetPolicy(ctx, &iam.GetPolicyInput{
-			PolicyArn: aws.String(policyArn),
-		})
-		log.Printf("PolicyARN:%s\n", *getPolicyOutput.Policy.Arn)
-		//----------------------testing----------------------
 
 		if createPolicyResult != nil {
 			policyArn = *createPolicyResult.Policy.Arn
@@ -353,19 +343,13 @@ func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn strin
 		KubernetesGroups: []string{"open-cluster-management:" + managedClusterName},
 	}
 
-	//config.WithRetryer(func() aws.Retryer {
-	//	return retry.AddWithErrorCodes(retry.NewStandard(), (*types.InvalidParameterException)(nil).ErrorCode())
-	//})
-
-	//----------------------testing----------------------
-	log.Printf("Before CreateAccessEntry:%s\n", roleArn)
-	//----------------------testing----------------------
 	createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params, func(opts *eks.Options) {
-		opts.Retryer = retry.NewStandard(func(o *retry.StandardOptions) {
-			o.MaxAttempts = 3
-			o.Backoff = retry.NewExponentialJitterBackoff(8 * time.Second)
-		})
+		opts.Retryer = retry.AddWithErrorCodes(retry.NewStandard(func(o *retry.StandardOptions) {
+			o.MaxAttempts = 10
+			o.Backoff = retry.NewExponentialJitterBackoff(100 * time.Second)
+		}), (*types.InvalidParameterException)(nil).ErrorCode())
 	})
+
 	if err != nil {
 		if !(strings.Contains(err.Error(), "EntityAlreadyExists")) {
 			log.Printf("Failed to create Access entry for the managed cluster %v because of %v\n", managedClusterName, err)

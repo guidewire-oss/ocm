@@ -22,6 +22,10 @@ var _ = Describe("ManagedCluster set hubAcceptsClient from true to false", Label
 		managedCluster = &clusterv1.ManagedCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: managedClusterName,
+				Annotations: map[string]string{
+					"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "7f8141296c75f2871e3d030f85c35692",
+					"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:123456789012:cluster/managed-cluster1",
+				},
 			},
 			Spec: clusterv1.ManagedClusterSpec{
 				HubAcceptsClient: true,
