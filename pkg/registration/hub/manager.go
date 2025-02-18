@@ -41,7 +41,6 @@ import (
 	"open-cluster-management.io/ocm/pkg/registration/hub/managedclustersetbinding"
 	"open-cluster-management.io/ocm/pkg/registration/hub/taint"
 	"open-cluster-management.io/ocm/pkg/registration/register"
-	"open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 	awsirsa "open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 	"open-cluster-management.io/ocm/pkg/registration/register/csr"
 )
@@ -160,34 +159,25 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	workInformers workv1informers.SharedInformerFactory,
 	addOnInformers addoninformers.SharedInformerFactory,
 ) error {
-
-	var approvers []register.Approver
 	var drivers []register.HubDriver
 	for _, enabledRegistrationDriver := range m.EnabledRegistrationDrivers {
 		switch enabledRegistrationDriver {
 		case "csr":
-			csrApprover, err := csr.NewCSRApprover(kubeClient, kubeInformers, m.ClusterAutoApprovalUsers, controllerContext.EventRecorder)
+			csrHubDriver, err := csr.NewCSRHubDriver(m.AutoApprovalCsrUsers, kubeClient, kubeInformers, m.ClusterAutoApprovalUsers, controllerContext.EventRecorder)
 			if err != nil {
 				return err
 			}
-			approvers = append(approvers, csrApprover)
-			drivers = append(drivers, csr.NewCSRHubDriver())
+			drivers = append(drivers, csrHubDriver)
 		case "awsirsa":
-			awsIRSAHubDriver, err := awsirsa.NewAWSIRSAHubDriver(ctx, m.HubClusterArn)
+			awsIRSAHubDriver, err := awsirsa.NewAWSIRSAHubDriver(ctx, m.HubClusterArn, m.AutoApprovalAwsPatterns)
 			if err != nil {
 				return err
 			}
 			drivers = append(drivers, awsIRSAHubDriver)
 		}
 	}
-	approver := register.NewAggregatedApprover(approvers...)
+
 	hubDriver := register.NewAggregatedHubDriver(drivers...)
-
-	csrAcceptor := csr.NewCsrAcceptor(m.AutoApprovalCsrUsers)
-
-	awsIrsaAcceptor := aws_irsa.NewAwsIrsaAcceptor(m.AutoApprovalAwsPatterns)
-
-	acceptor := register.NewAggregatedAcceptor(csrAcceptor, awsIrsaAcceptor)
 
 	managedClusterController := managedcluster.NewManagedClusterController(
 		kubeClient,
@@ -197,8 +187,6 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		kubeInformers.Rbac().V1().ClusterRoles(),
 		kubeInformers.Rbac().V1().RoleBindings(),
 		kubeInformers.Rbac().V1().ClusterRoleBindings(),
-		acceptor,
-		approver,
 		hubDriver,
 		controllerContext.EventRecorder,
 	)
@@ -315,7 +303,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		clusterClient,
 		kubeClient,
 		metadataClient,
-		approver,
+		hubDriver,
 		controllerContext.EventRecorder,
 		m.GCResourceList,
 		features.HubMutableFeatureGate.Enabled(ocmfeature.ResourceCleanup),
@@ -331,7 +319,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 
 	go managedClusterController.Run(ctx, 1)
 	go taintController.Run(ctx, 1)
-	go approver.Run(ctx, 1)
+	go hubDriver.Run(ctx, 1)
 	go leaseController.Run(ctx, 1)
 	go clockSyncController.Run(ctx, 1)
 	go managedClusterSetController.Run(ctx, 1)

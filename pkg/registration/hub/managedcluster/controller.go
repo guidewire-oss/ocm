@@ -44,8 +44,6 @@ type managedClusterController struct {
 	clusterLister listerv1.ManagedClusterLister
 	applier       *apply.PermissionApplier
 	patcher       patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
-	acceptor      register.Acceptor
-	approver      register.Approver
 	hubDriver     register.HubDriver
 	eventRecorder events.Recorder
 }
@@ -59,8 +57,6 @@ func NewManagedClusterController(
 	clusterRoleInformer rbacv1informers.ClusterRoleInformer,
 	rolebindingInformer rbacv1informers.RoleBindingInformer,
 	clusterRoleBindingInformer rbacv1informers.ClusterRoleBindingInformer,
-	acceptor register.Acceptor,
-	approver register.Approver,
 	hubDriver register.HubDriver,
 	recorder events.Recorder) factory.Controller {
 
@@ -68,8 +64,6 @@ func NewManagedClusterController(
 		kubeClient:    kubeClient,
 		clusterClient: clusterClient,
 		clusterLister: clusterInformer.Lister(),
-		acceptor:      acceptor,
-		approver:      approver,
 		hubDriver:     hubDriver,
 		applier: apply.NewPermissionApplier(
 			kubeClient,
@@ -120,7 +114,7 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 		// If the ManagedClusterAutoApproval feature is enabled, we automatically accept a cluster only
 		// when it joins for the first time, afterwards users can deny it again.
 		if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok {
-			acceptCluster, err := c.acceptor.Accept(ctx, managedCluster)
+			acceptCluster, err := c.hubDriver.Accept(ctx, managedCluster)
 			if err != nil {
 				return err
 			}
@@ -168,7 +162,7 @@ func (c *managedClusterController) sync(ctx context.Context, syncCtx factory.Syn
 			return aggErr
 		}
 
-		if err = c.approver.Cleanup(ctx, managedCluster); err != nil {
+		if err = c.hubDriver.Cleanup(ctx, managedCluster); err != nil {
 			return err
 		}
 
