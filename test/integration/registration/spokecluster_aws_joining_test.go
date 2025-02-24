@@ -184,16 +184,13 @@ var _ = ginkgo.Describe("Joining Process for aws flow", func() {
 			defer cancel()
 
 			// the ManagedCluster CR should be created after bootstrap
-			gomega.Eventually(func() error {
+			gomega.Eventually(func() bool {
 				cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
 				if err != nil {
-					return err
+					return false
 				}
-				if !cluster.Spec.HubAcceptsClient {
-					return fmt.Errorf("cluster should be accepted")
-				}
-				return nil
-			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
+				return cluster.Spec.HubAcceptsClient
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 		})
 
 		ginkgo.It("managedcluster should join successfully with auto approval rejected of manged cluster not in patterns for aws flow", func() {
@@ -219,18 +216,18 @@ var _ = ginkgo.Describe("Joining Process for aws flow", func() {
 			cancel := runAgent("joiningtest", agentOptions, commOptions, spokeCfg)
 			defer cancel()
 
-			// the ManagedCluster CR should be created after bootstrap
+			// The ManagedCluster CR should be created
 			gomega.Eventually(func() error {
-				cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
-				if err != nil {
-					return err
-				}
-				if cluster.Spec.HubAcceptsClient {
-					return fmt.Errorf("cluster should not be accepted")
-				}
-				return nil
+				_, err := util.GetManagedCluster(clusterClient, managedClusterName)
+				return err
 			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
 
+			// The ManagedCluster CR should never be accepted
+			gomega.Consistently(func() bool {
+				cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				return cluster.Spec.HubAcceptsClient
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeFalse())
 		})
 	}
 

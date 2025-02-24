@@ -23,14 +23,13 @@ import (
 )
 
 func TestAccept(t *testing.T) {
-
 	cases := []struct {
 		name       string
 		cluster    *clusterv1.ManagedCluster
 		isAccepted bool
 	}{
 		{
-			name: "Accept cluster when managedcluster in list of clusters.",
+			name: "Accept cluster when managedcluster in list of patterns",
 			cluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "managed-cluster1",
@@ -43,7 +42,7 @@ func TestAccept(t *testing.T) {
 			isAccepted: true,
 		},
 		{
-			name: "Reject cluster when managedcluster not in list of clusters.",
+			name: "Accept cluster when managedcluster in list of patterns",
 			cluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "managed-cluster2",
@@ -53,19 +52,76 @@ func TestAccept(t *testing.T) {
 					},
 				},
 			},
+			isAccepted: true,
+		},
+		{
+			name: "Accept cluster when managedcluster in list of patterns",
+			cluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "managed-cluster3",
+					Annotations: map[string]string{
+						"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-1:123456789012:cluster/managed-cluster3",
+						"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "7f8141296c75f2871e3d030f85c35692",
+					},
+				},
+			},
+			isAccepted: true,
+		},
+		{
+			name: "Reject cluster when managedcluster not in list of patterns",
+			cluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "managed-cluster4",
+					Annotations: map[string]string{
+						"agent.open-cluster-management.io/managed-cluster-arn":             "arn:aws:eks:us-west-2:999999999999:cluster/managed-cluster4",
+						"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "7f8141296c75f2871e3d030f85c35692",
+					},
+				},
+			},
 			isAccepted: false,
 		},
 		{
-			name: "Reject cluster when annotation not present.",
+			name: "Reject cluster when list of patterns has only a partial match",
 			cluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "managed-cluster2",
+					Name: "managed-cluster5",
+					Annotations: map[string]string{
+						"agent.open-cluster-management.io/managed-cluster-arn":             "XXXXXXarn:aws:eks:us-west-2:123456789012:cluster/managed-cluster5",
+						"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "7f8141296c75f2871e3d030f85c35692",
+					},
+				},
+			},
+			isAccepted: false,
+		},
+		{
+			name: "Reject cluster when cluster is empty",
+			cluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "managed-cluster6",
+					Annotations: map[string]string{
+						"agent.open-cluster-management.io/managed-cluster-arn":             "",
+						"agent.open-cluster-management.io/managed-cluster-iam-role-suffix": "7f8141296c75f2871e3d030f85c35692",
+					},
+				},
+			},
+			isAccepted: false,
+		},
+		{
+			name: "Reject cluster when annotation not present",
+			cluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "managed-cluster7",
 				},
 			},
 			isAccepted: false,
 		},
 	}
-	AwsIrsaHubDriver, err := NewAWSIRSAHubDriver(context.Background(), "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster", []string{"managed-cluster1"})
+	AwsIrsaHubDriver, err := NewAWSIRSAHubDriver(context.Background(), "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster",
+		[]string{
+			"arn:aws:eks:us-west-2:123456789012:cluster/.*",
+			"arn:aws:eks:us-west-1:123456789012:cluster/.*",
+		},
+	)
 
 	if err != nil {
 		t.Errorf("Error not expected")
@@ -79,7 +135,16 @@ func TestAccept(t *testing.T) {
 		},
 		)
 	}
+}
 
+func TestNewDriverValidation(t *testing.T) {
+	// Test with an invalid manager cluster approval pattern
+	_, err := NewAWSIRSAHubDriver(context.Background(), "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster", []string{
+		"arn:(aws:eks:us-west-2:123456789012:cluster/.*", // bad pattern
+	})
+	if err == nil {
+		t.Errorf("Error expected")
+	}
 }
 
 func TestRenderTemplates(t *testing.T) {

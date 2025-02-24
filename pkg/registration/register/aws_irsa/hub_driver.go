@@ -25,22 +25,18 @@ import (
 )
 
 type AWSIRSAHubDriver struct {
-	hubClusterArn           string
-	cfg                     aws.Config
-	autoApprovalAwsPatterns []string
+	hubClusterArn                string
+	cfg                          aws.Config
+	autoApprovedIdentityPatterns []*regexp.Regexp
 }
 
 func (a *AWSIRSAHubDriver) allowAccept(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
 	managedClusterArn := cluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
 	managedClusterIAMRoleSuffix := cluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
 	if managedClusterIAMRoleSuffix != "" && managedClusterArn != "" {
-		for _, AutoApprovalAwsPattern := range a.autoApprovalAwsPatterns {
-			re, err := regexp.Compile(AutoApprovalAwsPattern)
-			if err != nil {
-				fmt.Println("Failed to process the approved arn pattern for aws irsa auto approval", err)
-				return false, err
-			}
-			if re.MatchString(managedClusterArn) {
+		for _, p := range a.autoApprovedIdentityPatterns {
+			// Ensure the pattern matches the entire managed cluster ARN
+			if p.FindString(managedClusterArn) == managedClusterArn {
 				return true, nil
 				// TODO
 			} else {
@@ -52,9 +48,9 @@ func (a *AWSIRSAHubDriver) allowAccept(ctx context.Context, cluster *clusterv1.M
 }
 
 func (a *AWSIRSAHubDriver) Accept(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
-	log.Println(a.autoApprovalAwsPatterns)
+	log.Println(a.autoApprovedIdentityPatterns)
 	log.Println(cluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"])
-	if a.autoApprovalAwsPatterns == nil {
+	if a.autoApprovedIdentityPatterns == nil {
 		log.Println("managed cluster auto accept as no patterns present.")
 		return true, nil
 	}
@@ -266,17 +262,28 @@ func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn strin
 	return nil
 }
 
-func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, AutoApprovalAwsPatterns []string) (register.HubDriver, error) {
+func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApprovedIdentityPatterns []string) (register.HubDriver, error) {
 	logger := klog.FromContext(ctx)
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		logger.Error(err, "Failed to load aws config")
 		return nil, err
 	}
-	awsIRSADriverForHub := &AWSIRSAHubDriver{
-		hubClusterArn:           hubClusterArn,
-		cfg:                     cfg,
-		autoApprovalAwsPatterns: AutoApprovalAwsPatterns,
+
+	compiledPatterns := make([]*regexp.Regexp, len(autoApprovedIdentityPatterns))
+	for i, s := range autoApprovedIdentityPatterns {
+		p, err := regexp.Compile(s)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to process auto approval ARN pattern: %w", err)
+		}
+		compiledPatterns[i] = p
 	}
+
+	awsIRSADriverForHub := &AWSIRSAHubDriver{
+		hubClusterArn:                hubClusterArn,
+		cfg:                          cfg,
+		autoApprovedIdentityPatterns: compiledPatterns,
+	}
+
 	return awsIRSADriverForHub, nil
 }
