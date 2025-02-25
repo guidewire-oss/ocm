@@ -52,6 +52,8 @@ type HubManagerOptions struct {
 	GCResourceList             []string
 	ImportOption               *importeroptions.Options
 	HubClusterArn              string
+	AutoApprovedCSRUsers       []string
+	AutoApprovedARNPatterns    []string
 }
 
 // NewHubManagerOptions returns a HubManagerOptions
@@ -76,6 +78,8 @@ func (m *HubManagerOptions) AddFlags(fs *pflag.FlagSet) {
 			"The flag works only when ResourceCleanup feature gate is enable.")
 	fs.StringVar(&m.HubClusterArn, "hub-cluster-arn", m.HubClusterArn,
 		"Hub Cluster Arn required to connect to Hub and create IAM Roles and Policies")
+	fs.StringSliceVar(&m.AutoApprovedCSRUsers, "auto-approved-csr-users", m.AutoApprovedCSRUsers, "")
+	fs.StringSliceVar(&m.AutoApprovedARNPatterns, "auto-approved-arn-patterns", m.AutoApprovedARNPatterns, "")
 	m.ImportOption.AddFlags(fs)
 }
 
@@ -159,13 +163,13 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 	for _, enabledRegistrationDriver := range m.EnabledRegistrationDrivers {
 		switch enabledRegistrationDriver {
 		case "csr":
-			csrDriver, err := csr.NewCSRHubDriver(kubeClient, kubeInformers, m.ClusterAutoApprovalUsers, controllerContext.EventRecorder)
+			csrDriver, err := csr.NewCSRHubDriver(kubeClient, kubeInformers, m.ClusterAutoApprovalUsers, m.AutoApprovedCSRUsers, controllerContext.EventRecorder)
 			if err != nil {
 				return err
 			}
 			drivers = append(drivers, csrDriver)
 		case "awsirsa":
-			awsIRSAHubDriver, err := awsirsa.NewAWSIRSAHubDriver(ctx, m.HubClusterArn)
+			awsIRSAHubDriver, err := awsirsa.NewAWSIRSAHubDriver(ctx, m.HubClusterArn, m.AutoApprovedARNPatterns)
 			if err != nil {
 				return err
 			}

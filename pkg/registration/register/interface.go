@@ -91,4 +91,8 @@ type HubDriver interface {
 	// Cleanup is executed when hubAcceptClient in ManagedCluster is set false or cluster is deleting. The hub controller
 	// deletes rolebindings for the agent, and then this is the additional operation a driver should process.
 	Cleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error
+
+	// Accept is executed when autoapproval is enabled to verify if the managedcluster uses csr or awsirsa and
+	// setting hubAcceptClient based on autoApprovedIdentities
+	Accept(cluster *clusterv1.ManagedCluster) bool
 }
