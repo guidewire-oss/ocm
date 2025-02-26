@@ -42,7 +42,7 @@ func (a *AWSIRSAHubDriver) Accept(cluster *clusterv1.ManagedCluster) bool {
 	managedClusterArn := cluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
 	for _, p := range a.autoApprovedARNPatterns {
 		// Ensure the pattern matches the entire managed cluster ARN
-		if p.FindString(managedClusterArn) == managedClusterArn {
+		if p.FindString(managedClusterArn) == managedClusterArn && len(managedClusterArn) > 0 {
 			return true
 		}
 	}
