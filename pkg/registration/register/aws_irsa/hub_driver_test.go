@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
 	"open-cluster-management.io/ocm/manifests"
 	commonhelper "open-cluster-management.io/ocm/pkg/common/helpers"
 	testinghelpers "open-cluster-management.io/ocm/pkg/registration/helpers/testing"
@@ -128,8 +129,8 @@ func TestAccept(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			isAccepted, err := AwsIrsaHubDriver.Accept(context.TODO(), c.cluster)
-			if err == nil && c.isAccepted != isAccepted {
+			isAccepted := AwsIrsaHubDriver.Accept(c.cluster)
+			if c.isAccepted != isAccepted {
 				t.Errorf("expect %t, but %t", c.isAccepted, isAccepted)
 			}
 		},

@@ -180,7 +180,7 @@ func NewCSRHubDriver(
 	}
 	csrReconciles := []Reconciler{NewCSRRenewalReconciler(kubeClient, recorder)}
 	if features.HubMutableFeatureGate.Enabled(ocmfeature.ManagedClusterAutoApproval) {
-		if clusterAutoApprovalUsers != nil && len(clusterAutoApprovalUsers) > 0 {
+		if len(clusterAutoApprovalUsers) > 0 {
 			autoApprovedCSRUsers = clusterAutoApprovalUsers
 		}
 		csrReconciles = append(csrReconciles, NewCSRBootstrapReconciler(

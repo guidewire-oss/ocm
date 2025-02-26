@@ -179,10 +179,12 @@ func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 			RoleName:  aws.String(roleName),
 		})
 		if err != nil {
-			logger.V(4).Error(err, "Unable to attach policy to role for ManagedCluster", "IAMPolicy", policyName, "IAMRole", roleName, "ManagedCluster", managedClusterName)
+			logger.V(4).Error(err, "Unable to attach policy to role for ManagedCluster",
+				"IAMPolicy", policyName, "IAMRole", roleName, "ManagedCluster", managedClusterName)
 			return hubClusterName, roleArn, err
 		} else {
-			logger.V(4).Info("Successfully attached IAM Policy to Role for ManagedCluster", "IAMPolicy", policyName, "IAMRole", roleName, "ManagedCluster", managedClusterName)
+			logger.V(4).Info("Successfully attached IAM Policy to Role for ManagedCluster",
+				"IAMPolicy", policyName, "IAMRole", roleName, "ManagedCluster", managedClusterName)
 		}
 	}
 	return hubClusterName, roleArn, nil
@@ -237,10 +239,12 @@ func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn strin
 			logger.V(4).Error(err, "Failed to create Access entry for managed cluster", "ManagedCluster", managedClusterName)
 			return err
 		} else {
-			logger.V(4).Info("Ignore Access Entry creation for managed cluster as it is already in use", "ManagedCluster", managedClusterName)
+			logger.V(4).Info("Ignore Access Entry creation for managed cluster as it is already in use",
+				"ManagedCluster", managedClusterName)
 		}
 	} else {
-		logger.V(4).Info("Access entry created successfully for managed cluster", "AccessEntry", *createAccessEntryOutput.AccessEntry.AccessEntryArn, "ManagedCluster", managedClusterName)
+		logger.V(4).Info("Access entry created successfully for managed cluster",
+			"AccessEntry", *createAccessEntryOutput.AccessEntry.AccessEntryArn, "ManagedCluster", managedClusterName)
 	}
 	return nil
 }

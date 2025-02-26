@@ -1,7 +1,6 @@
 package csr
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -59,8 +58,8 @@ func TestAccept(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			isAccepted, err := csrHubDriver.Accept(context.TODO(), c.cluster)
-			if err == nil && c.isAccepted != isAccepted {
+			isAccepted := csrHubDriver.Accept(c.cluster)
+			if c.isAccepted != isAccepted {
 				t.Errorf("expect %t, but %t", c.isAccepted, isAccepted)
 			}
 		},
