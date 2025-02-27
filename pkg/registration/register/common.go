@@ -202,11 +202,11 @@ func (a *AggregatedHubDriver) CreatePermissions(ctx context.Context, cluster *cl
 
 func (a *AggregatedHubDriver) Accept(cluster *clusterv1.ManagedCluster) bool {
 	for _, hubRegisterDriver := range a.hubRegisterDrivers {
-		if hubRegisterDriver.Accept(cluster) {
-			return true
+		if !hubRegisterDriver.Accept(cluster) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (a *AggregatedHubDriver) Run(ctx context.Context, workers int) {

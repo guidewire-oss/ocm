@@ -172,7 +172,6 @@ func (c *CSRHubDriver) Cleanup(_ context.Context, _ *clusterv1.ManagedCluster) e
 func NewCSRHubDriver(
 	kubeClient kubernetes.Interface,
 	kubeInformers informers.SharedInformerFactory,
-	clusterAutoApprovalUsers []string,
 	autoApprovedCSRUsers []string,
 	recorder events.Recorder) (register.HubDriver, error) {
 	csrDriverForHub := &CSRHubDriver{
@@ -180,9 +179,6 @@ func NewCSRHubDriver(
 	}
 	csrReconciles := []Reconciler{NewCSRRenewalReconciler(kubeClient, recorder)}
 	if features.HubMutableFeatureGate.Enabled(ocmfeature.ManagedClusterAutoApproval) {
-		if len(clusterAutoApprovalUsers) > 0 {
-			autoApprovedCSRUsers = clusterAutoApprovalUsers
-		}
 		csrReconciles = append(csrReconciles, NewCSRBootstrapReconciler(
 			kubeClient,
 			autoApprovedCSRUsers,
@@ -226,11 +222,5 @@ func (a *CSRHubDriver) CreatePermissions(_ context.Context, _ *clusterv1.Managed
 }
 
 func (c *CSRHubDriver) Accept(cluster *clusterv1.ManagedCluster) bool {
-	return c.allows(cluster)
-}
-
-func (c *CSRHubDriver) allows(cluster *clusterv1.ManagedCluster) bool {
-	_, isManagedClusterArnPresent := cluster.Annotations["agent.open-cluster-management.io/managed-cluster-arn"]
-	_, isManagedClusterIAMRoleSuffixPresent := cluster.Annotations["agent.open-cluster-management.io/managed-cluster-iam-role-suffix"]
-	return !isManagedClusterArnPresent || !isManagedClusterIAMRoleSuffixPresent
+	return true
 }

@@ -336,13 +336,13 @@ func TestNewApprover(t *testing.T) {
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 3*time.Minute)
 	recorder := eventstesting.NewTestingEventRecorder(t)
 	utilruntime.Must(features.HubMutableFeatureGate.Add(ocmfeature.DefaultHubRegistrationFeatureGates))
-	_, err := NewCSRHubDriver(kubeClient, informerFactory, []string{}, []string{}, recorder)
+	_, err := NewCSRHubDriver(kubeClient, informerFactory, []string{}, recorder)
 	if err != nil {
 		t.Error(err)
 	}
 
 	features.HubMutableFeatureGate.Set(fmt.Sprintf("%s=true", ocmfeature.ManagedClusterAutoApproval))
-	_, err = NewCSRHubDriver(kubeClient, informerFactory, []string{}, []string{}, recorder)
+	_, err = NewCSRHubDriver(kubeClient, informerFactory, []string{}, recorder)
 	if err != nil {
 		t.Error(err)
 	}

@@ -50,7 +50,7 @@ func TestAccept(t *testing.T) {
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 3*time.Minute)
 	recorder := eventstesting.NewTestingEventRecorder(t)
 	utilruntime.Must(features.HubMutableFeatureGate.Add(ocmfeature.DefaultHubRegistrationFeatureGates))
-	csrHubDriver, err := NewCSRHubDriver(kubeClient, informerFactory, []string{}, []string{}, recorder)
+	csrHubDriver, err := NewCSRHubDriver(kubeClient, informerFactory, []string{}, recorder)
 
 	if err != nil {
 		t.Error(err)
