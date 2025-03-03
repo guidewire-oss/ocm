@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"html/template"
 	"regexp"
 	"strings"
@@ -29,6 +30,7 @@ type AWSIRSAHubDriver struct {
 	hubClusterArn           string
 	cfg                     aws.Config
 	autoApprovedARNPatterns []*regexp.Regexp
+	awsResourceTags         []string
 }
 
 func (a *AWSIRSAHubDriver) Accept(cluster *clusterv1.ManagedCluster) bool {
@@ -74,12 +76,12 @@ func (a *AWSIRSAHubDriver) CreatePermissions(ctx context.Context, cluster *clust
 
 	// Create an EKS client
 	eksClient := eks.NewFromConfig(a.cfg)
-	hubClusterName, roleArn, err := createIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, a.cfg)
+	hubClusterName, roleArn, err := createIAMRoleAndPolicy(ctx, a.hubClusterArn, cluster, a.cfg, a.awsResourceTags)
 	if err != nil {
 		return err
 	}
 
-	err = createAccessEntry(ctx, eksClient, roleArn, hubClusterName, cluster.Name)
+	err = createAccessEntry(ctx, eksClient, roleArn, hubClusterName, cluster.Name, a.awsResourceTags)
 	if err != nil {
 		return err
 	}
@@ -90,7 +92,7 @@ func (a *AWSIRSAHubDriver) CreatePermissions(ctx context.Context, cluster *clust
 // This function creates:
 // 1. IAM Role and Policy in the hub cluster IAM
 // 2. Returns the hubClusterName and the roleArn to be used for Access Entry creation
-func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config) (string, string, error) {
+func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config, tags []string) (string, string, error) {
 	logger := klog.FromContext(ctx)
 	var managedClusterIamRoleSuffix string
 	var createRoleOutput *iam.CreateRoleOutput
@@ -143,9 +145,17 @@ func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 			return hubClusterName, roleArn, err
 		}
 
+		parsedTags, err := parseTagsForRolesAndPolicies(tags)
+
+		if err != nil {
+			logger.V(4).Error(err, "Failed to parse tags for AWS roles and policies", "ManagedCluster", managedClusterName)
+			return hubClusterName, roleArn, err
+		}
+
 		createRoleOutput, err = iamClient.CreateRole(ctx, &iam.CreateRoleInput{
 			RoleName:                 aws.String(roleName),
 			AssumeRolePolicyDocument: aws.String(renderedTemplates[1]),
+			Tags:                     parsedTags,
 		})
 		if err != nil {
 			// Ignore error when role already exists as we will always create the same role
@@ -219,13 +229,15 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 }
 
 // This function creates access entry which allow access to an IAM role from outside the cluster
-func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string) error {
+func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string, tags []string) error {
 	logger := klog.FromContext(ctx)
+	tagsForAccessEntry, err := parseTagsForAccessEntry(tags)
 	params := &eks.CreateAccessEntryInput{
 		ClusterName:      aws.String(hubClusterName),
 		PrincipalArn:     aws.String(roleArn),
 		Username:         aws.String(managedClusterName),
 		KubernetesGroups: []string{fmt.Sprintf("open-cluster-management:%s", managedClusterName)},
+		Tags:             tagsForAccessEntry,
 	}
 
 	createAccessEntryOutput, err := eksClient.CreateAccessEntry(ctx, params, func(opts *eks.Options) {
@@ -249,7 +261,39 @@ func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn strin
 	return nil
 }
 
-func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApprovedIdentityPatterns []string) (register.HubDriver, error) {
+func parseTagsForAccessEntry(tags []string) (map[string]string, error) {
+
+	parsedTags := map[string]string{}
+	for _, tag := range tags {
+		splitTag := strings.Split(tag, "=")
+		if len(splitTag) != 2 {
+			return nil, fmt.Errorf("missing value in the tag")
+		}
+		key, value := splitTag[0], splitTag[1]
+		parsedTags[key] = value
+	}
+	return parsedTags, nil
+}
+
+func parseTagsForRolesAndPolicies(tags []string) ([]iamtypes.Tag, error) {
+
+	var parsedTags []iamtypes.Tag
+
+	for _, tag := range tags {
+		splitTag := strings.Split(tag, "=")
+		if len(splitTag) != 2 {
+			return nil, fmt.Errorf("missing value from tag")
+		}
+		key, value := splitTag[0], splitTag[1]
+		parsedTags = append(parsedTags, iamtypes.Tag{
+			Key:   &key,
+			Value: &value,
+		})
+	}
+	return parsedTags, nil
+}
+
+func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApprovedIdentityPatterns []string, awsResourceTags []string) (register.HubDriver, error) {
 	logger := klog.FromContext(ctx)
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -270,6 +314,7 @@ func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApproved
 		hubClusterArn:           hubClusterArn,
 		cfg:                     cfg,
 		autoApprovedARNPatterns: compiledPatterns,
+		awsResourceTags:         awsResourceTags,
 	}
 
 	return awsIRSADriverForHub, nil

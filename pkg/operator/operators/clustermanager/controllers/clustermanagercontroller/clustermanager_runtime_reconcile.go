@@ -77,11 +77,12 @@ func (c *runtimeReconcile) reconcile(ctx context.Context, cm *operatorapiv1.Clus
 		var enabledRegistrationDrivers []string
 		for _, registrationDriver := range cm.Spec.RegistrationConfiguration.RegistrationDrivers {
 			enabledRegistrationDrivers = append(enabledRegistrationDrivers, registrationDriver.AuthType)
-			if registrationDriver.AuthType == "awsirsa" {
-				config.HubClusterArn = registrationDriver.HubClusterArn
-				config.AutoApprovedARNPatterns = registrationDriver.AutoApprovedIdentities
-			} else if registrationDriver.AuthType == "csr" {
-				config.AutoApprovedCSRUsers = registrationDriver.AutoApprovedIdentities
+			if registrationDriver.AuthType == "awsirsa" && registrationDriver.AwsIrsa != nil {
+				config.HubClusterArn = registrationDriver.AwsIrsa.HubClusterArn
+				config.AutoApprovedARNPatterns = registrationDriver.AwsIrsa.AutoApprovedIdentities
+				config.AwsResourceTags = registrationDriver.AwsIrsa.Tags
+			} else if registrationDriver.AuthType == "csr" && registrationDriver.CSR != nil {
+				config.AutoApprovedCSRUsers = registrationDriver.CSR.AutoApprovedIdentities
 			}
 		}
 		config.EnabledRegistrationDrivers = strings.Join(enabledRegistrationDrivers, ",")
