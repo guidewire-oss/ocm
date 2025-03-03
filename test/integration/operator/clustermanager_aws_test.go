@@ -100,7 +100,7 @@ var _ = ginkgo.Describe("ClusterManager Default Mode with aws registration", fun
 				return present && strings.Split(hubClusterArnArg, "=")[1] == hubClusterArn
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 		})
-		ginkgo.It("registration-controller should have command line option aws-resource-tags when initialized with awsirsa when passed in init", func() {
+		ginkgo.It("registration-controller should have command line option aws-resource-tags when initialized with awsirsa", func() {
 			gomega.Eventually(func() bool {
 
 				registrationControllerDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).
@@ -154,7 +154,7 @@ var _ = ginkgo.Describe("ClusterManager Default Mode with aws registration", fun
 				return err
 			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
 		})
-		ginkgo.It("registration-controller should not have command line option aws-resource-tags when initialized with awsirsa when not present on clustermanager", func() {
+		ginkgo.It("registration-controller should not have command line option aws-resource-tags when not initialized with awsirsa", func() {
 			gomega.Eventually(func() bool {
 
 				registrationControllerDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).

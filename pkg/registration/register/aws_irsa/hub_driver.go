@@ -92,7 +92,8 @@ func (a *AWSIRSAHubDriver) CreatePermissions(ctx context.Context, cluster *clust
 // This function creates:
 // 1. IAM Role and Policy in the hub cluster IAM
 // 2. Returns the hubClusterName and the roleArn to be used for Access Entry creation
-func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config, awsResourceTags []string) (string, string, error) {
+func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config,
+	awsResourceTags []string) (string, string, error) {
 	logger := klog.FromContext(ctx)
 	var managedClusterIamRoleSuffix string
 	var createRoleOutput *iam.CreateRoleOutput
@@ -229,7 +230,8 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 }
 
 // This function creates access entry which allow access to an IAM role from outside the cluster
-func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string, awsResourceTags []string) error {
+func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string,
+	awsResourceTags []string) error {
 	logger := klog.FromContext(ctx)
 	tagsForAccessEntry, err := parseTagsForAccessEntry(awsResourceTags)
 	if err != nil {
@@ -298,7 +300,8 @@ func parseTagsForRolesAndPolicies(tags []string) ([]iamtypes.Tag, error) {
 	return parsedTags, nil
 }
 
-func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApprovedIdentityPatterns []string, awsResourceTags []string) (register.HubDriver, error) {
+func NewAWSIRSAHubDriver(ctx context.Context, hubClusterArn string, autoApprovedIdentityPatterns []string,
+	awsResourceTags []string) (register.HubDriver, error) {
 	logger := klog.FromContext(ctx)
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
