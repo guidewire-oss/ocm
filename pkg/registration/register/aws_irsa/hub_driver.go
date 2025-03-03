@@ -92,7 +92,7 @@ func (a *AWSIRSAHubDriver) CreatePermissions(ctx context.Context, cluster *clust
 // This function creates:
 // 1. IAM Role and Policy in the hub cluster IAM
 // 2. Returns the hubClusterName and the roleArn to be used for Access Entry creation
-func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config, tags []string) (string, string, error) {
+func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCluster *v1.ManagedCluster, cfg aws.Config, awsResourceTags []string) (string, string, error) {
 	logger := klog.FromContext(ctx)
 	var managedClusterIamRoleSuffix string
 	var createRoleOutput *iam.CreateRoleOutput
@@ -145,7 +145,7 @@ func createIAMRoleAndPolicy(ctx context.Context, hubClusterArn string, managedCl
 			return hubClusterName, roleArn, err
 		}
 
-		parsedTags, err := parseTagsForRolesAndPolicies(tags)
+		parsedTags, err := parseTagsForRolesAndPolicies(awsResourceTags)
 
 		if err != nil {
 			logger.V(4).Error(err, "Failed to parse tags for AWS roles and policies", "ManagedCluster", managedClusterName)
@@ -229,9 +229,14 @@ func renderTemplates(argTemplates []string, data interface{}) (args []string, er
 }
 
 // This function creates access entry which allow access to an IAM role from outside the cluster
-func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string, tags []string) error {
+func createAccessEntry(ctx context.Context, eksClient *eks.Client, roleArn string, hubClusterName string, managedClusterName string, awsResourceTags []string) error {
 	logger := klog.FromContext(ctx)
-	tagsForAccessEntry, err := parseTagsForAccessEntry(tags)
+	tagsForAccessEntry, err := parseTagsForAccessEntry(awsResourceTags)
+	if err != nil {
+		logger.V(4).Error(err, "Failed to parse tags during AWS access entry creation", "ManagedCluster", managedClusterName)
+		return err
+	}
+
 	params := &eks.CreateAccessEntryInput{
 		ClusterName:      aws.String(hubClusterName),
 		PrincipalArn:     aws.String(roleArn),
