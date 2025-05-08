@@ -56,7 +56,8 @@ const (
 	HubLabelKey = "createdByClusterManager"
 
 	// AgentLabelKey is used to filter resources in informers
-	AgentLabelKey = "createdByKlusterlet"
+	AgentLabelKey          = "createdByKlusterlet"
+	ClusterManagerLabelKey = "createdByClusterManager"
 )
 
 const (
@@ -833,6 +834,15 @@ func GetKlusterletAgentLabels(klusterlet *operatorapiv1.Klusterlet, enableSyncLa
 	// This label key is used to filter resources in deployment informer
 	labels[AgentLabelKey] = klusterlet.GetName()
 
+	return labels
+}
+
+func GetClusterManagerLabels(cm *operatorapiv1.ClusterManager) map[string]string {
+	labels := cm.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[ClusterManagerLabelKey] = cm.GetName()
 	return labels
 }
 
