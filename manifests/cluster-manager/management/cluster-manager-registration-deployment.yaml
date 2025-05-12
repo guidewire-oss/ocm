@@ -6,6 +6,11 @@ metadata:
   labels:
     app: clustermanager-controller
     createdByClusterManager: {{ .ClusterManagerName }}
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    {{ $key }}: {{ $value }}
+    {{ end }}
+    {{ end }}
 spec:
   replicas: {{ .Replica }}
   selector:
