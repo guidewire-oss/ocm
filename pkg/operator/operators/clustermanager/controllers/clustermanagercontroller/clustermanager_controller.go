@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	errorhelpers "errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -63,6 +64,7 @@ type clusterManagerController struct {
 	controlPlaneNodeLabelSelector string
 	deploymentReplicas            int32
 	operatorNamespace             string
+	enableSyncLabels              bool
 }
 
 type clusterManagerReconcile interface {
@@ -90,6 +92,7 @@ func NewClusterManagerController(
 	controlPlaneNodeLabelSelector string,
 	deploymentReplicas int32,
 	operatorNamespace string,
+	enableSyncLabels bool,
 ) factory.Controller {
 	controller := &clusterManagerController{
 		operatorKubeClient: operatorKubeClient,
@@ -107,6 +110,7 @@ func NewClusterManagerController(
 		controlPlaneNodeLabelSelector: controlPlaneNodeLabelSelector,
 		deploymentReplicas:            deploymentReplicas,
 		operatorNamespace:             operatorNamespace,
+		enableSyncLabels:              enableSyncLabels,
 	}
 
 	return factory.New().WithSync(controller.sync).
@@ -220,6 +224,11 @@ func (n *clusterManagerController) sync(ctx context.Context, controllerContext f
 	if clusterManager.Spec.DeployOption.Hosted != nil {
 		config.RegistrationWebhook = convertWebhookConfiguration(clusterManager.Spec.DeployOption.Hosted.RegistrationWebhookConfiguration)
 		config.WorkWebhook = convertWebhookConfiguration(clusterManager.Spec.DeployOption.Hosted.WorkWebhookConfiguration)
+	}
+
+	if n.enableSyncLabels {
+		fmt.Printf("get cluster manager labels: %v", helpers.GetClusterManagerLabels(clusterManager))
+		config.Labels = helpers.GetClusterManagerLabels(clusterManager)
 	}
 
 	// Update finalizer at first
