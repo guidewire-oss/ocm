@@ -53,7 +53,8 @@ const (
 	DefaultAddonNamespace = "open-cluster-management-agent-addon"
 
 	// AgentLabelKey is used to filter resources in informers
-	AgentLabelKey = "createdByKlusterlet"
+	AgentLabelKey          = "createdByKlusterlet"
+	ClusterManagerLabelKey = "createdByClusterManager"
 )
 
 const (
@@ -829,6 +830,22 @@ func GetKlusterletAgentLabels(klusterlet *operatorapiv1.Klusterlet) map[string]s
 	labels[AgentLabelKey] = klusterlet.GetName()
 
 	return labels
+}
+
+func GetClusterManagerLabels(cm *operatorapiv1.ClusterManager) map[string]string {
+	labels := cm.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	return labels
+}
+
+func ConvertLabelsMapToString(labels map[string]string) string {
+	var labelList []string
+	for key, value := range labels {
+		labelList = append(labelList, fmt.Sprintf("%s=%s", key, value))
+	}
+	return strings.Join(labelList, ",")
 }
 
 func MapCompare(required, existing map[string]string) bool {

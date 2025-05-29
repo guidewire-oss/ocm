@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -46,6 +47,7 @@ func startHubOperator(ctx context.Context, mode operatorapiv1.InstallMode) {
 	}
 
 	o := &clustermanager.Options{}
+	o.EnableSyncLabels = true
 	err := o.RunClusterManagerOperator(ctx, &controllercmd.ControllerContext{
 		KubeConfig:        config,
 		EventRecorder:     util.NewIntegrationTestEventRecorder("integration"),
@@ -1180,6 +1182,95 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
 		})
 
+		ginkgo.It("should have labels on resources created by clustermanager", func() {
+			// Get clustermanager resource
+			clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			labels := helpers.GetClusterManagerLabels(clusterManager)
+
+			// Compare labels on registration-controller
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubRegistrationDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected registration-controller labels to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+			// Ensure labels list string is present on registration-controller as command line args
+			gomega.Eventually(func() bool {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubRegistrationDeployment, metav1.GetOptions{})
+				if err != nil {
+					return false
+				}
+				commandLineArgs := registrationDeployment.Spec.Template.Spec.Containers[0].Args
+				labelsArg, present := findMatchingArg(commandLineArgs, "--labels")
+				return present && strings.SplitN(labelsArg, "=", 2)[1] == helpers.ConvertLabelsMapToString(labels)
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
+			// Compare labels on registration-webhook
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubRegistrationWebhookDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected registration-webhook labels to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+			// Compare labels on work-webhook
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubWorkWebhookDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected work-webhook labels to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+			// Compare labels on placement-controller
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubPlacementDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected placement-controller labels to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+			// Compare labels on addon-manager-controller
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubAddOnManagerDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected labels addon-manager-controller to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+
+			// Compare labels on work-controller
+			gomega.Eventually(func() error {
+				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubWorkControllerDeployment, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !helpers.MapCompare(registrationDeployment.GetLabels(), labels) {
+					return fmt.Errorf("expected work-controller labels to be %v, but got %v", labels, registrationDeployment.GetLabels())
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
+		})
 	})
 
 	ginkgo.Context("Cluster manager statuses", func() {
@@ -1197,12 +1288,10 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", func() {
 				"HubRegistrationDegraded", "UnavailableRegistrationPod", metav1.ConditionTrue)
 			util.AssertClusterManagerCondition(clusterManagerName, operatorClient,
 				"Progressing", "ClusterManagerDeploymentRolling", metav1.ConditionTrue)
-
 			// Update replica of deployment
 			updateDeploymentsStatusSuccess(kubeClient, hubNamespace,
 				hubRegistrationDeployment, hubPlacementDeployment, hubRegistrationWebhookDeployment,
 				hubWorkWebhookDeployment, hubWorkControllerDeployment, hubAddonManagerDeployment)
-
 			// The cluster manager should be functional at last
 			util.AssertClusterManagerCondition(clusterManagerName, operatorClient,
 				"HubRegistrationDegraded", "RegistrationFunctional", metav1.ConditionFalse)
