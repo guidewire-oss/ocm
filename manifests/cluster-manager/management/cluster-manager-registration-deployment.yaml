@@ -5,6 +5,11 @@ metadata:
   namespace: {{ .ClusterManagerNamespace }}
   labels:
     app: clustermanager-controller
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    {{ $key }}: {{ $value }}
+    {{ end }}
+    {{ end }}
 spec:
   replicas: {{ .Replica }}
   selector:
@@ -79,6 +84,9 @@ spec:
           {{if .AwsResourceTags}}
           - "--aws-resource-tags={{ .AwsResourceTags }}"
           {{end}}
+          {{ if gt (len .Labels) 0 }}
+          - "--labels={{ .Labels }}"
+          {{ end }}
         env:
           - name: POD_NAME
             valueFrom:

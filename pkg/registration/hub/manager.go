@@ -56,6 +56,7 @@ type HubManagerOptions struct {
 	AutoApprovedCSRUsers       []string
 	AutoApprovedARNPatterns    []string
 	AwsResourceTags            []string
+	Labels                     string
 }
 
 // NewHubManagerOptions returns a HubManagerOptions
@@ -88,6 +89,8 @@ func (m *HubManagerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&m.AutoApprovedARNPatterns, "auto-approved-arn-patterns", m.AutoApprovedARNPatterns,
 		"A list of AWS EKS ARN patterns such that an EKS cluster will be auto approved if its ARN matches with any of the patterns")
 	fs.StringSliceVar(&m.AwsResourceTags, "aws-resource-tags", m.AwsResourceTags, "A list of tags to apply to AWS resources created through the OCM controllers")
+	fs.StringVar(&m.Labels, "labels", m.Labels,
+		"Labels to be added to the resources created by registration controller. The format is key1=value1,key2=value2.")
 	m.ImportOption.AddFlags(fs)
 }
 
@@ -201,6 +204,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		workInformers.Work().V1().ManifestWorks(),
 		hubDriver,
 		controllerContext.EventRecorder,
+		m.Labels,
 	)
 
 	taintController := taint.NewTaintController(
@@ -248,6 +252,7 @@ func (m *HubManagerOptions) RunControllerManagerWithInformers(
 		clusterInformers.Cluster().V1().ManagedClusters(),
 		kubeInformers.Rbac().V1().ClusterRoles(),
 		controllerContext.EventRecorder,
+		m.Labels,
 	)
 
 	addOnHealthCheckController := addon.NewManagedClusterAddOnHealthCheckController(

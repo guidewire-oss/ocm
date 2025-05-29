@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"testing"
 	"time"
 
@@ -33,12 +34,19 @@ import (
 )
 
 func TestSyncManagedCluster(t *testing.T) {
+	const (
+		testCustomLabel       = "custom-label"
+		testCustomLabelValue  = "custom-value"
+		testCustomLabel2      = "custom-label2"
+		testCustomLabelValue2 = "custom-value2"
+	)
 	cases := []struct {
 		name                   string
 		autoApprovalEnabled    bool
 		roleBindings           []runtime.Object
 		manifestWorks          []runtime.Object
 		startingObjects        []runtime.Object
+		labels                 string
 		validateClusterActions func(t *testing.T, actions []clienttesting.Action)
 		validateKubeActions    func(t *testing.T, actions []clienttesting.Action)
 	}{
@@ -160,7 +168,7 @@ func TestSyncManagedCluster(t *testing.T) {
 					"delete", // clusterrolebinding
 					"delete", // registration rolebinding
 					"delete", // work rolebinding
-					"patch")  // work rolebinding
+					"patch") // work rolebinding
 				patch := actions[4].(clienttesting.PatchAction).GetPatch()
 				roleBinding := &rbacv1.RoleBinding{}
 				err := json.Unmarshal(patch, roleBinding)
@@ -210,6 +218,67 @@ func TestSyncManagedCluster(t *testing.T) {
 				}
 				if _, ok := managedCluster.Annotations[clusterAcceptedAnnotationKey]; !ok {
 					t.Errorf("expected auto approval annotation, but failed")
+				}
+			},
+		},
+		{
+			name:            "create resources with labels",
+			startingObjects: []runtime.Object{testinghelpers.NewAcceptedManagedCluster()},
+			validateClusterActions: func(t *testing.T, actions []clienttesting.Action) {
+				testingcommon.AssertNoActions(t, actions)
+			},
+			labels: fmt.Sprintf("%s=%s,%s=%s", testCustomLabel, testCustomLabelValue, testCustomLabel2, testCustomLabelValue2),
+			validateKubeActions: func(t *testing.T, actions []clienttesting.Action) {
+				testingcommon.AssertActions(t, actions,
+					"get", "create", // namespace
+					"create", // clusterrole
+					"create", // clusterrolebinding
+					"create", // registration rolebinding
+					"create") // work rolebinding
+
+				// Validate labels on namespace
+				namespace := actions[1].(clienttesting.CreateAction).GetObject().(*corev1.Namespace)
+				if namespace.Labels[testCustomLabel] != testCustomLabelValue {
+					t.Errorf("expected label '%s=%s' on namespace, but got: %v", testCustomLabel, testCustomLabelValue, namespace.Labels)
+				}
+				if namespace.Labels[testCustomLabel2] != testCustomLabelValue2 {
+					t.Errorf("expected label '%s=%s' on namespace, but got: %v", testCustomLabel2, testCustomLabelValue2, namespace.Labels)
+				}
+
+				// Validate labels on clusterrole
+				clusterRole := actions[2].(clienttesting.CreateAction).GetObject().(*rbacv1.ClusterRole)
+				if clusterRole.Labels[testCustomLabel] != testCustomLabelValue {
+					t.Errorf("expected label '%s=%s' on clusterrole, but got: %v", testCustomLabel, testCustomLabelValue, clusterRole.Labels)
+				}
+				if clusterRole.Labels[testCustomLabel2] != testCustomLabelValue2 {
+					t.Errorf("expected label '%s=%s' on clusterrole, but got: %v", testCustomLabel2, testCustomLabelValue2, clusterRole.Labels)
+				}
+
+				// Validate labels on clusterrolebinding
+				clusterRoleBinding := actions[3].(clienttesting.CreateAction).GetObject().(*rbacv1.ClusterRoleBinding)
+				if clusterRoleBinding.Labels[testCustomLabel] != testCustomLabelValue {
+					t.Errorf("expected label '%s=%s' on clusterrolebinding, but got: %v", testCustomLabel, testCustomLabelValue, clusterRoleBinding.Labels)
+				}
+				if clusterRoleBinding.Labels[testCustomLabel2] != testCustomLabelValue2 {
+					t.Errorf("expected label '%s=%s' on clusterrolebinding, but got: %v", testCustomLabel2, testCustomLabelValue2, clusterRoleBinding.Labels)
+				}
+
+				// Validate labels on registration rolebinding
+				registrationRoleBinding := actions[4].(clienttesting.CreateAction).GetObject().(*rbacv1.RoleBinding)
+				if registrationRoleBinding.Labels[testCustomLabel] != testCustomLabelValue {
+					t.Errorf("expected label '%s=%s' on registration rolebinding, but got: %v", testCustomLabel, testCustomLabelValue, registrationRoleBinding.Labels)
+				}
+				if registrationRoleBinding.Labels[testCustomLabel2] != testCustomLabelValue2 {
+					t.Errorf("expected label '%s=%s' on registration rolebinding, but got: %v", testCustomLabel2, testCustomLabelValue2, registrationRoleBinding.Labels)
+				}
+
+				// Validate labels on work rolebinding
+				workRoleBinding := actions[5].(clienttesting.CreateAction).GetObject().(*rbacv1.RoleBinding)
+				if workRoleBinding.Labels[testCustomLabel] != testCustomLabelValue {
+					t.Errorf("expected label '%s=%s' on work rolebinding, but got: %v", testCustomLabel, testCustomLabelValue, workRoleBinding.Labels)
+				}
+				if workRoleBinding.Labels[testCustomLabel2] != testCustomLabelValue2 {
+					t.Errorf("expected label '%s=%s' on work rolebinding, but got: %v", testCustomLabel2, testCustomLabelValue2, workRoleBinding.Labels)
 				}
 			},
 		},
@@ -263,7 +332,8 @@ func TestSyncManagedCluster(t *testing.T) {
 				),
 				patcher.NewPatcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus](clusterClient.ClusterV1().ManagedClusters()),
 				register.NewNoopHubDriver(),
-				eventstesting.NewTestingEventRecorder(t)}
+				eventstesting.NewTestingEventRecorder(t),
+				c.labels}
 			syncErr := ctrl.sync(context.TODO(), testingcommon.NewFakeSyncContext(t, testinghelpers.TestManagedClusterName))
 			if syncErr != nil && !errors.Is(syncErr, requeueError) {
 				t.Errorf("unexpected err: %v", syncErr)
