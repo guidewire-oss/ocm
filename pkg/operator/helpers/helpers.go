@@ -3,8 +3,10 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/ghodss/yaml"
@@ -847,8 +849,9 @@ func GetClusterManagerLabels(cm *operatorapiv1.ClusterManager) map[string]string
 
 func ConvertLabelsMapToString(labels map[string]string) string {
 	var labelList []string
-	for key, value := range labels {
-		labelList = append(labelList, fmt.Sprintf("%s=%s", key, value))
+	sortedMap := slices.Sorted(maps.Keys(labels))
+	for _, key := range sortedMap {
+		labelList = append(labelList, fmt.Sprintf("%s=%s", key, labels[key]))
 	}
 	return strings.Join(labelList, ",")
 }
