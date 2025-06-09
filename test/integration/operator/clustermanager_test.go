@@ -1186,7 +1186,7 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", ginkgo.Ordered, func() {
 			clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			// Updating the cluster manager with labels
-			var labelsMap = map[string]string{"app": "clustermanager", "test-label": "test-value", "test-label2": "test-value2"}
+			var labelsMap = map[string]string{"app": "clustermanager"}
 			clusterManager.Labels = labelsMap
 			updatedClusterManager, err := operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
 			gomega.Expect(err).NotTo(gomega.HaveOccurred())
