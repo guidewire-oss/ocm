@@ -1182,16 +1182,21 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", ginkgo.Ordered, func() {
 		})
 
 		ginkgo.It("should have labels on resources created by clustermanager", func() {
-			// Get clustermanager resource
-			clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			// Updating the cluster manager with labels
-			var labelsMap = map[string]string{"app": "clustermanager"}
-			clusterManager.Labels = labelsMap
-			updatedClusterManager, err := operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
-			gomega.Expect(err).NotTo(gomega.HaveOccurred())
-			labels := updatedClusterManager.Labels
-			// Compare labels on registration-controller
+
+			labels := map[string]string{"app": "clustermanager", "test-label": "test-value", "test-label2": "test-value2"}
+			gomega.Eventually(func() error {
+				clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				// Updating the cluster manager with labels
+				clusterManager.Labels = labels
+				_, err = operatorClient.OperatorV1().ClusterManagers().Update(context.Background(), clusterManager, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeNil())
 			gomega.Eventually(func() error {
 				registrationDeployment, err := kubeClient.AppsV1().Deployments(hubNamespace).Get(context.Background(), hubRegistrationDeployment, metav1.GetOptions{})
 				if err != nil {
