@@ -76,12 +76,12 @@ func ManagedClusterAssetFn(fs embed.FS, managedClusterName string) resourceapply
 	}
 }
 
-func ManagedClusterAssetFnWithAccepted(fs embed.FS, managedClusterName string, accepted bool, labels map[string]string) resourceapply.AssetFunc {
+func ManagedClusterAssetFnWithAccepted(fs embed.FS, managedClusterName string, accepted bool, labels string) resourceapply.AssetFunc {
 	return func(name string) ([]byte, error) {
 		config := struct {
 			ManagedClusterName string
 			Accepted           bool
-			Labels             map[string]string
+			Labels             string
 		}{
 			ManagedClusterName: managedClusterName,
 			Accepted:           accepted,

@@ -17,6 +17,8 @@ var templateFuncs = map[string]interface{}{
 	"base64":    base64encode,
 	"indent":    indent,
 	"load":      load,
+	"split":     strings.Split,
+	"splitn":    strings.SplitN,
 }
 
 func indent(indention int, v []byte) string {

@@ -3,9 +3,12 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: managedclustermutators.admission.cluster.open-cluster-management.io
   labels:
-    {{ if gt (len .Labels) 0 }}
-    {{ range $key, $value := .Labels }}
-    "{{ $key }}": "{{ $value }}"
+    {{ if .Labels }}
+    {{ range $element := split "," .Labels }}
+    {{ $kv := splitn $element "=" 2 }}
+    {{- if eq (len $kv) 2 }}
+    {{ index $kv 0 }}: {{ index $kv 1 }}
+    {{- end }}
     {{ end }}
     {{ end }}
 webhooks:

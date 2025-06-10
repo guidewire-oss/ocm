@@ -31,7 +31,7 @@ func TestSyncManagedClusterClusterRole(t *testing.T) {
 		name            string
 		clusters        []runtime.Object
 		clusterroles    []runtime.Object
-		labels          map[string]string
+		labels          string
 		validateActions func(t *testing.T, actions []clienttesting.Action)
 	}{
 		{
@@ -71,7 +71,7 @@ func TestSyncManagedClusterClusterRole(t *testing.T) {
 			name:         "add labels to created clusterroles",
 			clusters:     []runtime.Object{testinghelpers.NewManagedCluster()},
 			clusterroles: []runtime.Object{},
-			labels:       map[string]string{testCustomLabel: testCustomLabelValue},
+			labels:       "testCustomLabel=testCustomLabelValue",
 			validateActions: func(t *testing.T, actions []clienttesting.Action) {
 				testingcommon.AssertActions(t, actions, "create", "create")
 				registrationClusterRole := (actions[0].(clienttesting.CreateActionImpl).Object).(*rbacv1.ClusterRole)

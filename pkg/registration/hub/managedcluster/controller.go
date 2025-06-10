@@ -62,7 +62,7 @@ type managedClusterController struct {
 	patcher            patcher.Patcher[*v1.ManagedCluster, v1.ManagedClusterSpec, v1.ManagedClusterStatus]
 	hubDriver          register.HubDriver
 	eventRecorder      events.Recorder
-	labels             map[string]string
+	labels             string
 }
 
 // NewManagedClusterController creates a new managed cluster controller
@@ -76,7 +76,7 @@ func NewManagedClusterController(
 	clusterRoleBindingInformer rbacv1informers.ClusterRoleBindingInformer,
 	manifestWorkInformer workinformers.ManifestWorkInformer,
 	hubDriver register.HubDriver,
-	recorder events.Recorder, labels map[string]string) factory.Controller {
+	recorder events.Recorder, labels string) factory.Controller {
 
 	c := &managedClusterController{
 		kubeClient:         kubeClient,

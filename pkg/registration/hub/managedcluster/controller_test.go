@@ -46,7 +46,7 @@ func TestSyncManagedCluster(t *testing.T) {
 		roleBindings           []runtime.Object
 		manifestWorks          []runtime.Object
 		startingObjects        []runtime.Object
-		labels                 map[string]string
+		labels                 string
 		validateClusterActions func(t *testing.T, actions []clienttesting.Action)
 		validateKubeActions    func(t *testing.T, actions []clienttesting.Action)
 	}{
@@ -227,7 +227,7 @@ func TestSyncManagedCluster(t *testing.T) {
 			validateClusterActions: func(t *testing.T, actions []clienttesting.Action) {
 				testingcommon.AssertNoActions(t, actions)
 			},
-			labels: map[string]string{testCustomLabel: testCustomLabelValue, testCustomLabel2: testCustomLabelValue2},
+			labels: "testCustomLabel=testCustomLabelValue,testCustomLabel2=testCustomLabelValue2",
 			validateKubeActions: func(t *testing.T, actions []clienttesting.Action) {
 				testingcommon.AssertActions(t, actions,
 					"get", "create", // namespace
