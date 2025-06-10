@@ -1183,7 +1183,7 @@ var _ = ginkgo.Describe("ClusterManager Default Mode", ginkgo.Ordered, func() {
 
 		ginkgo.It("should have labels on resources created by clustermanager", func() {
 
-			labels := map[string]string{"app": "clustermanager", "test-label": "test-value", "test-label2": "test-value2"}
+			labels := map[string]string{"app": "clustermanager", "createdByClusterManager": "hub", "test-label": "test-value", "test-label2": "test-value2"}
 			gomega.Eventually(func() error {
 				clusterManager, err := operatorClient.OperatorV1().ClusterManagers().Get(context.Background(), clusterManagerName, metav1.GetOptions{})
 				if err != nil {

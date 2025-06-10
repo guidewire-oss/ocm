@@ -30,9 +30,9 @@ var _ = Describe("ManagedCluster set hubAcceptsClient from true to false", Order
 		// stop the hub and start new hub with the updated option
 		stopHub()
 
-		awsHubOption := hub.NewHubManagerOptions()
-		awsHubOption.Labels = fmt.Sprintf("%s=%s,%s=%s", testCustomLabel, testCustomLabelValue, testCustomLabel2, testCustomLabelValue2)
-		startHub(awsHubOption)
+		awsHubOptionWithLabelSetting := hub.NewHubManagerOptions()
+		awsHubOptionWithLabelSetting.Labels = fmt.Sprintf("%s=%s,%s=%s", testCustomLabel, testCustomLabelValue, testCustomLabel2, testCustomLabelValue2)
+		startHub(awsHubOptionWithLabelSetting)
 
 		// stop hub with awsOption and restart hub with default option
 		DeferCleanup(func() {
