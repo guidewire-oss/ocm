@@ -9,10 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	v1 "open-cluster-management.io/api/cluster/v1"
 
 	"open-cluster-management.io/ocm/pkg/registration/hub"
 )
@@ -146,6 +148,15 @@ var _ = Describe("ManagedCluster set hubAcceptsClient from true to false", Order
 
 	})
 	It("should set hubAcceptsClient to false", func() {
+		Eventually(func() error {
+			mc, err := clusterClient.ClusterV1().ManagedClusters().Get(context.Background(), managedCluster.Name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if !meta.IsStatusConditionTrue(mc.Status.Conditions, v1.ManagedClusterConditionHubAccepted) {
+
+			}
+		}, eventuallyTimeout, eventuallyInterval).Should(Succeed())
 		// Set hubAcceptsClient to false
 		Eventually(func() error {
 			mc, err := clusterClient.ClusterV1().ManagedClusters().Get(context.Background(), managedCluster.Name, metav1.GetOptions{})
