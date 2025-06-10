@@ -154,8 +154,9 @@ var _ = Describe("ManagedCluster set hubAcceptsClient from true to false", Order
 				return err
 			}
 			if !meta.IsStatusConditionTrue(mc.Status.Conditions, v1.ManagedClusterConditionHubAccepted) {
-
+				return fmt.Errorf("managed cluster %s should have hub accepted condition", managedCluster.Name)
 			}
+			return nil
 		}, eventuallyTimeout, eventuallyInterval).Should(Succeed())
 		// Set hubAcceptsClient to false
 		Eventually(func() error {
