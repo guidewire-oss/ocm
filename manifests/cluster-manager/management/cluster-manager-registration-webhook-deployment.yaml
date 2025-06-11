@@ -7,13 +7,13 @@ metadata:
     app: {{ .ClusterManagerName }}-registration-webhook
     createdByClusterManager: {{ .ClusterManagerName }}
     {{ if .Labels }}
-    {{ range $element := split "," .Labels }}
-    {{ $kv := splitn $element "=" 2 }}
-    {{- if eq (len $kv) 2 }}
+    {{ range $pair := split .Labels "," }}
+      {{ $kv := splitn $pair "=" 2 }}
+      {{ if eq (len $kv) 2 }}
     {{ index $kv 0 }}: {{ index $kv 1 }}
+      {{ end }}
+    {{ end }}
     {{- end }}
-    {{ end }}
-    {{ end }}
 spec:
   replicas: {{ .Replica }}
   selector:

@@ -7,11 +7,11 @@ metadata:
     app: clustermanager-controller
     createdByClusterManager: {{ .ClusterManagerName }}
     {{ if .Labels }}
-    {{ range $element := split "," .Labels }}
-    {{ $kv := splitn $element "=" 2 }}
-    {{- if eq (len $kv) 2 }}
+    {{ range $pair := split .Labels "," }}
+      {{ $kv := splitn $pair "=" 2 }}
+      {{ if eq (len $kv) 2 }}
     {{ index $kv 0 }}: {{ index $kv 1 }}
-    {{- end }}
+      {{ end }}
     {{ end }}
     {{ end }}
 spec:
@@ -20,11 +20,11 @@ spec:
     matchLabels:
       app: clustermanager-registration-controller
       {{ if .Labels }}
-      {{ range $element := split "," .Labels }}
-      {{ $kv := splitn $element "=" 2 }}
-      {{- if eq (len $kv) 2 }}
+      {{ range $pair := split .Labels "," }}
+        {{ $kv := splitn $pair "=" 2 }}
+        {{ if eq (len $kv) 2 }}
       {{ index $kv 0 }}: {{ index $kv 1 }}
-      {{- end }}
+        {{ end }}
       {{ end }}
       {{ end }}
   template:
@@ -32,11 +32,11 @@ spec:
       labels:
         app: clustermanager-registration-controller
         {{ if .Labels }}
-        {{ range $element := split "," .Labels }}
-        {{ $kv := splitn $element "=" 2 }}
-        {{- if eq (len $kv) 2 }}
+        {{ range $pair := split .Labels "," }}
+          {{ $kv := splitn $pair "=" 2 }}
+          {{ if eq (len $kv) 2 }}
         {{ index $kv 0 }}: {{ index $kv 1 }}
-        {{- end }}
+          {{ end }}
         {{ end }}
         {{ end }}
     spec:
