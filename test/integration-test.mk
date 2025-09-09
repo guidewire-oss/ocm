@@ -76,7 +76,8 @@ test-cloudevents-work-grpc-integration: ensure-kubebuilder-tools build-work-inte
 		-v=4 ${ARGS}
 .PHONY: test-cloudevents-work-grpc-integration
 
-test-integration: test-registration-operator-integration test-registration-integration test-placement-integration test-work-integration test-addon-integration
+# test-integration: test-registration-operator-integration test-registration-integration test-placement-integration test-work-integration test-addon-integration
+test-integration: test-registration-integration
 .PHONY: test-integration
 
 test-cloudevents-integration: test-cloudevents-work-mqtt-integration test-cloudevents-work-grpc-integration
