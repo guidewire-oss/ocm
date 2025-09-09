@@ -187,11 +187,13 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 
 		})
 
-		ginkgo.It("managedcluster should join successfully with auto approval of manged cluster in patterns for aws flow", func() {
+		ginkgo.It("managedcluster should join successfully with auto approval of managed cluster in patterns for aws flow", func() {
 
 			managedClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/managed-cluster1"
 			managedClusterRoleSuffix := "7f8141296c75f2871e3d030f85c35692"
 			hubClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster1"
+
+			fmt.Println("printing managedClusterName: ", managedClusterName)
 
 			// run registration agent
 			agentOptions := &spoke.SpokeAgentOptions{
@@ -224,11 +226,12 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 		})
 
-		ginkgo.It("managedcluster should join successfully with auto approval rejected of manged cluster not in patterns for aws flow", func() {
+		ginkgo.It("managedcluster should not join with auto approval rejected of managed cluster not in patterns for aws flow", func() {
 
 			managedClusterArn := "arn:aws:eks:us-west-1:123456789012:cluster/managed-cluster2"
 			managedClusterRoleSuffix := "7f8141296c75f2871e3d030f85c35692"
 			hubClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster1"
+			fmt.Println("printing managedClusterName: ", managedClusterName)
 
 			// run registration agent
 			agentOptions := &spoke.SpokeAgentOptions{
