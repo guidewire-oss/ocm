@@ -38,7 +38,7 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 		awsHubOption := hub.NewHubManagerOptions()
 		awsHubOption.EnabledRegistrationDrivers = []string{operatorv1.CSRAuthType, operatorv1.AwsIrsaAuthType}
 		awsHubOption.HubClusterArn = "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster1"
-		awsHubOption.AutoApprovedARNPatterns = []string{"arn:aws:eks:eu-west-2:123456789012:cluster/.*"}
+		awsHubOption.AutoApprovedARNPatterns = []string{"arn:aws:eks:us-west-2:123456789012:cluster/.*"}
 		startHub(awsHubOption)
 
 		// stop hub with awsOption and restart hub with default option
@@ -189,7 +189,7 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 
 		ginkgo.It("managedcluster should join successfully with auto approval of managed cluster in patterns for aws flow", func() {
 
-			managedClusterArn := "arn:aws:eks:eu-west-2:123456789012:cluster/managed-cluster1"
+			managedClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/managed-cluster1"
 			managedClusterRoleSuffix := "7f8141296c75f2871e3d030f85c35692"
 			hubClusterArn := "arn:aws:eks:us-west-2:123456789012:cluster/hub-cluster1"
 
@@ -260,7 +260,11 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 				return err
 			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
 
-			// The ManagedCluster CR should never be accepted
+			// Wait a bit to ensure the hub has had time to process the cluster
+			// and make the auto-approval decision
+			time.Sleep(5 * time.Second)
+
+			// The ManagedCluster CR should never be accepted since the ARN doesn't match the pattern
 			gomega.Consistently(func() bool {
 				cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
 				gomega.Expect(err).NotTo(gomega.HaveOccurred())

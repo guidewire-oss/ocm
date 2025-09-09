@@ -18,11 +18,13 @@ import (
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ocmfeature "open-cluster-management.io/api/feature"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	"open-cluster-management.io/ocm/pkg/common/queue"
 	"open-cluster-management.io/ocm/pkg/features"
 	"open-cluster-management.io/ocm/pkg/registration/helpers"
 	"open-cluster-management.io/ocm/pkg/registration/register"
+	awsirsa "open-cluster-management.io/ocm/pkg/registration/register/aws_irsa"
 )
 
 type CSR interface {
@@ -231,5 +233,15 @@ func (a *CSRHubDriver) CreatePermissions(_ context.Context, _ *clusterv1.Managed
 }
 
 func (c *CSRHubDriver) Accept(cluster *clusterv1.ManagedCluster) bool {
+	// Only accept clusters that are NOT using AWS IRSA authentication
+	// AWS IRSA clusters have specific annotations set
+	_, hasArnAnnotation := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn]
+	_, hasRoleSuffixAnnotation := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterIAMRoleSuffix]
+
+	// If the cluster has AWS IRSA annotations, it should not be accepted by the CSR driver
+	if hasArnAnnotation && hasRoleSuffixAnnotation {
+		return false
+	}
+
 	return true
 }
