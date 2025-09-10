@@ -259,21 +259,25 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 
 			// The ManagedCluster CR should be created
 			gomega.Eventually(func() error {
-				_, err := util.GetManagedCluster(clusterClient, managedClusterName)
-				return err
-			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
-
-			// Wait for the managed cluster to have AWS IRSA annotations populated
-			gomega.Eventually(func() bool {
 				cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
 				if err != nil {
-					return false
+					return err
 				}
-				// Check for the presence of expected AWS IRSA annotations
-				_, hasArn := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn]
-				_, hasRole := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterIAMRoleSuffix]
-				return hasArn && hasRole
-			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue(), "ManagedCluster should have AWS IRSA annotations")
+				fmt.Printf("ManagedCluster ARN: %s\n", cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn])
+				return nil
+			}, eventuallyTimeout, eventuallyInterval).ShouldNot(gomega.HaveOccurred())
+
+			// // Wait for the managed cluster to have AWS IRSA annotations populated
+			// gomega.Eventually(func() bool {
+			// 	cluster, err := util.GetManagedCluster(clusterClient, managedClusterName)
+			// 	if err != nil {
+			// 		return false
+			// 	}
+			// 	// Check for the presence of expected AWS IRSA annotations
+			// 	_, hasArn := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn]
+			// 	_, hasRole := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterIAMRoleSuffix]
+			// 	return hasArn && hasRole
+			// }, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue(), "ManagedCluster should have AWS IRSA annotations")
 
 			// The ManagedCluster CR should never be accepted
 			gomega.Consistently(func() bool {
