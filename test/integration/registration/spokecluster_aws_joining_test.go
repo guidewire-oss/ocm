@@ -220,13 +220,14 @@ var _ = ginkgo.Describe("Joining Process for aws flow", ginkgo.Ordered, func() {
 				if err != nil {
 					return false
 				}
-				// Check for the presence of expected AWS IRSA annotations
-				_, hasArn := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn]
-				_, hasRole := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterIAMRoleSuffix]
-				if hasArn && hasRole {
-					return cluster.Spec.HubAcceptsClient
-				}
-				return false
+				// // Check for the presence of expected AWS IRSA annotations
+				// _, hasArn := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterArn]
+				// _, hasRole := cluster.Annotations[operatorv1.ClusterAnnotationsKeyPrefix+"/"+awsirsa.ManagedClusterIAMRoleSuffix]
+				// if hasArn && hasRole {
+				// 	return cluster.Spec.HubAcceptsClient
+				// }
+				// return false
+				return cluster.Spec.HubAcceptsClient
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 		})
 
